@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String  @id @default(uuid())
+  email          String  @unique
+  password       String
+  name           String?
+  profilePicture String?
+  role           Role    @default(RENTER)
+
+  listings       Listing[]
+  bookingsRenter Booking[] @relation("RenterBookings")
+  bookingsOwner  Booking[] @relation("OwnerBookings")
+  reviews        Review[]
+
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Listing {
+  id          String        @id @default(uuid())
+  title       String
+  description String
+  pricePerDay Int
+  location    String
+  images      String[]
+  category    String?
+  status      ListingStatus @default(PENDING)
+
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+
+  bookings Booking[]
+  reviews  Review[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id String @id @default(uuid())
+
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId String
+
+  renter   User   @relation("RenterBookings", fields: [renterId], references: [id], onDelete: Cascade)
+  renterId String
+
+  owner   User   @relation("OwnerBookings", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String
+
+  startDate     DateTime
+  endDate       DateTime
+  status        BookingStatus @default(PENDING)
+  totalPrice    Int
+  paymentStatus PaymentStatus @default(PENDING)
+  transactionId String?
+
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Message {
+  id      String  @id @default(uuid())
+  content String
+  read    Boolean @default(false)
+
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId String
+
+  receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiverId String
+
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id      String  @id @default(uuid())
+  rating  Int
+  comment String?
+
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  RENTER
+  OWNER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum ListingStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
