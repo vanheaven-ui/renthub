@@ -1,3 +1,5 @@
+"use client"
+
 import { useQuery } from "@tanstack/react-query";
 import { getListings } from "@/lib/api";
 import { Listing } from "@/types";
