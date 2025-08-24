@@ -1,8 +1,16 @@
 export interface User {
   id: string;
-  name: string;
   email: string;
-  // Add other user fields like role if you have them
+  password?: string; // Optional for safety
+  name?: string;
+  profilePicture?: string;
+  role?: Role;
+}
+
+export enum Role {
+  RENTER = "RENTER",
+  OWNER = "OWNER",
+  ADMIN = "ADMIN",
 }
 
 export interface AuthResponse {
@@ -24,4 +32,29 @@ export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
+}
+
+export enum ListingStatus {
+  PENDING = "PENDING",
+  APPROVED = "APPROVED",
+  SUSPENDED = "SUSPENDED",
+}
+
+export interface Listing {
+  id: string;
+  title: string;
+  description: string;
+  pricePerDay: number;
+  location: string;
+  images: string[];
+  status: ListingStatus;
+  ownerId: string;
+}
+
+export interface CreateListingPayload {
+  title: string;
+  description: string;
+  pricePerDay: number;
+  location: string;
+  images: File[];
 }
