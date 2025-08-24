@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { getListings } from "@/lib/api";
@@ -14,8 +14,18 @@ const HomePage = () => {
     queryFn: getListings,
   });
 
-  if (isLoading) return <div>Loading listings...</div>;
-  if (error) return <div>Error fetching listings.</div>;
+  if (isLoading)
+    return (
+      <div className="h-screen flex justify-center items-center">
+        Loading listings...
+      </div>
+    );
+  if (error)
+    return (
+      <div className="h-screen flex justify-center items-center">
+        Error fetching listings.
+      </div>
+    );
 
   return (
     <div className="container mx-auto p-4">
