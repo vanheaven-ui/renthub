@@ -11,68 +11,6 @@ interface CreateListingRequest extends AuthRequest {
     | { [fieldname: string]: Express.Multer.File[] };
 }
 
-// export const createListing = async (
-//   req: CreateListingRequest,
-//   res: Response
-// ) => {
-//   try {
-//     const { title, description, pricePerDay, location, category } = req.body;
-
-//     const images: Express.Multer.File[] = Array.isArray(req.files)
-//       ? req.files
-//       : (Object.values(req.files || {}).flat() as Express.Multer.File[]);
-
-//     const userId = req.user?.userId;
-
-//     if (!userId) {
-//       return res.status(401).json({ message: "User not authenticated" });
-//     }
-
-//     // Ensure only owners can create listings
-//     const user = await prisma.user.findUnique({ where: { id: userId } });
-//     if (user?.role !== "OWNER") {
-//       return res
-//         .status(403)
-//         .json({ message: "Only owners can create listings." });
-//     }
-
-//     if (!images || images.length === 0) {
-//       return res
-//         .status(400)
-//         .json({ message: "At least one image is required." });
-//     }
-
-//     // Upload images to Cloudinary
-//     const uploadedImages = await Promise.all(
-//       images.map((file) =>
-//         cloudinary.uploader.upload(file.path, { folder: "listings" })
-//       )
-//     );
-
-//     const imageUrls = uploadedImages.map((img) => img.secure_url);
-
-//     // Create the new listing in the database
-//     const newListing = await prisma.listing.create({
-//       data: {
-//         title,
-//         description,
-//         pricePerDay: Number(pricePerDay),
-//         location,
-//         images: imageUrls,
-//         ownerId: userId,
-//         category,
-//       },
-//     });
-
-//     res
-//       .status(201)
-//       .json({ message: "Listing created successfully", listing: newListing });
-//   } catch (error) {
-//     console.error("Error creating listing:", error);
-//     res.status(500).json({ message: "Internal server error" });
-//   }
-// };
-
 export const createListing = async (
   req: CreateListingRequest,
   res: Response
