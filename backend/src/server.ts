@@ -16,12 +16,17 @@ dotenv.config();
 
 const app = express();
 
+const corsOptions = {
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
+};
+
 const server = http.createServer(app);
 
 const io = initSocket(server);
 
 app.use(express.json());
-app.use(cors()); 
+app.use(cors(corsOptions)); 
 app.use(cookieParser());
 
 app.use((req, _res, next) => {
