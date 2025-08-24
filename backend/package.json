@@ -6,7 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "tsc",
+    "build": "npm install && tsc",
     "dev": "ts-node-dev src/server.ts"
   },
   "keywords": [],
