@@ -57,3 +57,18 @@ export const createListing = async (payload: CreateListingPayload) => {
 
   return response.data;
 };
+
+export const getListingById = async (id: string): Promise<Listing> => {
+  const response = await api.get(`/api/listings/${id}`);
+  return response.data;
+};
+
+export const updateListing = async (id: string, payload: any) => {
+  const response = await api.put(`/api/listings/${id}`, payload);
+  return response.data;
+};
+
+export const deleteListing = async (id: string) => {
+  const response = await api.delete(`/api/listings/${id}`);
+  return response.data;
+};
