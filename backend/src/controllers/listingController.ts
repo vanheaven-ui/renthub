@@ -23,7 +23,6 @@ export const createListing = async (
       : (Object.values(req.files || {}).flat() as Express.Multer.File[]);
 
     const userId = req.user?.userId;
-    console.log(userId)
 
     if (!userId) {
       return res.status(401).json({ message: "User not authenticated" });
@@ -42,12 +41,9 @@ export const createListing = async (
         .json({ message: "At least one image is required." });
     }
 
-    // Upload images using unsigned preset
-    const uploadPreset = "test_unsigned_preset"; // replace with your actual preset name
-
     const uploadedImages = await Promise.all(
       images.map((file) =>
-        (cloudinary.uploader as any).unsigned_upload(file.path, uploadPreset, {
+        cloudinary.uploader.upload(file.path, {
           folder: "listings",
         })
       )
@@ -71,30 +67,21 @@ export const createListing = async (
       message: "Listing created successfully",
       listing: newListing,
     });
-  } catch (error) {
-    console.error("Error creating listing:", error);
+  } catch {
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
-
 export const getListings = async (req: Request, res: Response) => {
   try {
-    const {
-      search,
-      category,
-      minPrice,
-      maxPrice,
-      location,
-    } = req.query;
+    const { search, category, minPrice, maxPrice, location } = req.query;
 
     const where: any = {};
 
-    // Build the query object based on the parameters
     if (search) {
       where.OR = [
-        { title: { contains: String(search), mode: 'insensitive' } },
-        { description: { contains: String(search), mode: 'insensitive' } },
+        { title: { contains: String(search), mode: "insensitive" } },
+        { description: { contains: String(search), mode: "insensitive" } },
       ];
     }
 
@@ -105,7 +92,7 @@ export const getListings = async (req: Request, res: Response) => {
     if (location) {
       where.location = {
         contains: String(location),
-        mode: 'insensitive',
+        mode: "insensitive",
       };
     }
 
@@ -121,12 +108,11 @@ export const getListings = async (req: Request, res: Response) => {
 
     const listings = await prisma.listing.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     res.status(200).json(listings);
-  } catch (error) {
-    console.error('Error fetching listings:', error);
-    res.status(500).json({ message: 'Internal server error' });
+  } catch {
+    res.status(500).json({ message: "Internal server error" });
   }
 };
