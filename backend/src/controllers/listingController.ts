@@ -110,6 +110,7 @@ export const createListing = async (
     const uploadedImages = await Promise.all(
       images.map((file) =>
         cloudinary.uploader.upload(file.path, {
+        cloudinary.uploader.upload(file.path, {
           folder: "listings",
         })
       )
@@ -134,6 +135,7 @@ export const createListing = async (
       listing: newListing,
     });
   } catch {
+  } catch {
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -141,12 +143,14 @@ export const createListing = async (
 export const getListings = async (req: Request, res: Response) => {
   try {
     const { search, category, minPrice, maxPrice, location } = req.query;
+    const { search, category, minPrice, maxPrice, location } = req.query;
 
     const where: any = {};
 
-    // Build the query object based on the parameters
     if (search) {
       where.OR = [
+        { title: { contains: String(search), mode: "insensitive" } },
+        { description: { contains: String(search), mode: "insensitive" } },
         { title: { contains: String(search), mode: "insensitive" } },
         { description: { contains: String(search), mode: "insensitive" } },
       ];
@@ -159,6 +163,7 @@ export const getListings = async (req: Request, res: Response) => {
     if (location) {
       where.location = {
         contains: String(location),
+        mode: "insensitive",
         mode: "insensitive",
       };
     }
@@ -176,6 +181,7 @@ export const getListings = async (req: Request, res: Response) => {
     const listings = await prisma.listing.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: "desc" },
     });
 
     res.status(200).json(listings);
@@ -184,3 +190,4 @@ export const getListings = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
