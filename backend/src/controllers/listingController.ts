@@ -1,16 +1,21 @@
+// backend/controllers/listingController.ts
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
-import cloudinary from "../config/cloudinary";
 import { AuthRequest } from "../middleware/authMiddleware";
+import { supabase, supabaseBucket } from "../config/supabase";
 
 const prisma = new PrismaClient();
 
+// Accept Multer files array OR object
 interface CreateListingRequest extends AuthRequest {
   files?:
     | Express.Multer.File[]
     | { [fieldname: string]: Express.Multer.File[] };
 }
 
+/**
+ * Create a new listing (Owner only)
+ */
 export const createListing = async (
   req: CreateListingRequest,
   res: Response
@@ -18,47 +23,75 @@ export const createListing = async (
   try {
     const { title, description, pricePerDay, location, category } = req.body;
 
+    // Normalize Multer files
     const images: Express.Multer.File[] = Array.isArray(req.files)
       ? req.files
       : (Object.values(req.files || {}).flat() as Express.Multer.File[]);
 
-    const userId = req.user?.userId;
-
-    if (!userId) {
+    if (!req.user?.userId) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (user?.role !== "OWNER") {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+    });
+
+    if (!user || user.role !== "OWNER") {
       return res
         .status(403)
         .json({ message: "Only owners can create listings." });
     }
 
-    if (!images || images.length === 0) {
+    if (images.length === 0) {
       return res
         .status(400)
         .json({ message: "At least one image is required." });
     }
 
-    const uploadedImages = await Promise.all(
-      images.map((file) =>
-        cloudinary.uploader.upload(file.path, {
-          folder: "listings",
-        })
-      )
-    );
+    // Upload images to Supabase Storage (private bucket)
+    const uploadedImages: string[] = [];
 
-    const imageUrls = uploadedImages.map((img) => img.secure_url);
+    for (const file of images) {
+      const filePath = `${Date.now()}-${file.originalname}`; // clean path
+      const { error: uploadError } = await supabase.storage
+        .from(supabaseBucket)
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+        });
 
+      if (uploadError) {
+        console.error("Supabase upload error:", uploadError.message);
+        return res.status(500).json({
+          message: "Image upload failed",
+          error: uploadError.message,
+        });
+      }
+
+      // Generate signed URL (valid for 1 hour)
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from(supabaseBucket)
+        .createSignedUrl(filePath, 60 * 60);
+
+      if (signedError || !signedData?.signedUrl) {
+        console.error("Supabase signed URL error:", signedError?.message);
+        return res.status(500).json({
+          message: "Failed to generate image URL",
+          error: signedError?.message,
+        });
+      }
+
+      uploadedImages.push(signedData.signedUrl);
+    }
+
+    // Save listing in DB
     const newListing = await prisma.listing.create({
       data: {
         title,
         description,
         pricePerDay: Number(pricePerDay),
         location,
-        images: imageUrls,
-        ownerId: userId,
+        images: uploadedImages,
+        ownerId: req.user.userId,
         category,
       },
     });
@@ -67,15 +100,22 @@ export const createListing = async (
       message: "Listing created successfully",
       listing: newListing,
     });
-  } catch {
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error) {
+    console.error("Error in createListing:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: (error as Error).message,
+    });
   }
 };
 
+/**
+ * Get listings with optional filters
+ * Refresh signed URLs for private bucket
+ */
 export const getListings = async (req: Request, res: Response) => {
   try {
     const { search, category, minPrice, maxPrice, location } = req.query;
-
     const where: any = {};
 
     if (search) {
@@ -86,7 +126,6 @@ export const getListings = async (req: Request, res: Response) => {
     }
 
     if (category) where.category = String(category);
-
     if (location) {
       where.location = { contains: String(location), mode: "insensitive" };
     }
@@ -102,8 +141,39 @@ export const getListings = async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json(listings);
-  } catch {
-    res.status(500).json({ message: "Internal server error" });
+    // Refresh signed URLs for private bucket
+    const listingsWithUrls = await Promise.all(
+      listings.map(async (listing) => {
+        const signedImages = await Promise.all(
+          listing.images.map(async (filePath: string) => {
+            const fileName = filePath.split("/").pop() || filePath;
+
+            const { data, error } = await supabase.storage
+              .from(supabaseBucket)
+              .createSignedUrl(fileName, 60 * 60);
+
+            if (error || !data?.signedUrl) {
+              console.error("Failed to generate signed URL:", error?.message);
+              return filePath; // fallback
+            }
+
+            return data.signedUrl;
+          })
+        );
+
+        return {
+          ...listing,
+          images: signedImages,
+        };
+      })
+    );
+
+    res.status(200).json(listingsWithUrls);
+  } catch (error) {
+    console.error("Error in getListings:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: (error as Error).message,
+    });
   }
 };

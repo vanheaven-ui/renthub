@@ -19,8 +19,6 @@ export const authenticateToken = (
 ) => {
   const token = req.cookies.token;
 
-  console.log("TOKEN IS HERE: ", token)
-
   if (!token) {
     return res
       .status(401)
