@@ -5,15 +5,15 @@ import multer from "multer";
 
 const router = Router();
 
-// Configure Multer 
-const upload = multer({ dest: "uploads/" }); // files will temporarily go to ./uploads
+// Use Multer memory storage
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 // POST /listings
-// Use Multer middleware to handle multiple images, then authenticate, then create listing
 router.post(
   "/",
   authenticateToken,
-  upload.array("images", 5), // 'images' is the field name from the frontend form
+  upload.array("images", 5), // 'images' is the field name from the frontend
   createListing
 );
 
