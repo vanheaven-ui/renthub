@@ -20,6 +20,7 @@ export interface AuthResponse {
 
 export interface ApiResponse<T> {
   data: T;
+  user: T;
   message: string;
 }
 
@@ -46,6 +47,7 @@ export interface Listing {
   description: string;
   pricePerDay: number;
   location: string;
+  category: string;
   images: string[];
   status: ListingStatus;
   ownerId: string;
@@ -57,4 +59,27 @@ export interface CreateListingPayload {
   pricePerDay: number;
   location: string;
   images: File[];
+}
+
+export enum BookingStatus {
+  PENDING = "PENDING",
+  CONFIRMED = "CONFIRMED",
+  REJECTED = "REJECTED",
+}
+
+export interface BookingPayload {
+  listingId: string;
+  startDate: Date;
+  endDate: Date;
+}
+
+export interface Booking {
+  id: string;
+  listingId: string;
+  renterId: string;
+  ownerId: string;
+  startDate: string;
+  endDate: string;
+  status: BookingStatus;
+  totalPrice: number;
 }

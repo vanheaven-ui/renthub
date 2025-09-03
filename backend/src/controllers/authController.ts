@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { AuthRequest } from "../middleware/authMiddleware";
 
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your_fallback_secret";
@@ -112,6 +113,28 @@ export const logout = async (req: Request, res: Response) => {
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {
     console.error("Error during logout:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getMe = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { id: true, email: true, name: true, role: true }, 
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({ data: user });
+  } catch (error) {
+    console.error("Error fetching user data:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
