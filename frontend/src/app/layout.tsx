@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import Providers from "./providers";
+import { AuthProvider } from "./context/AuthProvider";
+import FloatingClientButtons from "../components/FloatingClientButtons";
 
 const dmSans = DM_Sans({ subsets: ["latin"] });
 
@@ -19,7 +21,10 @@ export default function RootLayout({
     <html lang="en">
       <body className={dmSans.className}>
         <Providers>
-          {children}
+          <AuthProvider>
+            <main>{children}</main>
+            <FloatingClientButtons />
+          </AuthProvider>
         </Providers>
       </body>
     </html>

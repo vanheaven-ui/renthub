@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { register, login, logout } from "../controllers/authController";
+import { register, login, logout, getMe } from "../controllers/authController";
+import { authenticateToken } from "../middleware/authMiddleware";
 import {
   loginLimiter,
   registerLimiter,
@@ -7,8 +8,12 @@ import {
 
 const router = Router();
 
+// Public Routes
 router.post("/register", registerLimiter, register);
 router.post("/login", loginLimiter, login);
-router.post("/logout", logout);
+
+// Protected Routes (These require a valid token)
+router.get("/me", authenticateToken, getMe);
+router.post("/logout", authenticateToken, logout);
 
 export default router;

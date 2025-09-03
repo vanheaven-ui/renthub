@@ -6,6 +6,9 @@ import {
   AuthResponse,
   Listing,
   CreateListingPayload,
+  BookingPayload,
+  Booking,
+  User,
 } from "../types";
 
 const api = axios.create({
@@ -13,14 +16,18 @@ const api = axios.create({
   withCredentials: true,
 });
 
-export const loginUser = async (
-  payload: LoginPayload
-): Promise<AuthResponse> => {
-  const response: AxiosResponse<ApiResponse<AuthResponse>> = await api.post(
-    "/api/auth/login",
-    payload
+export const getMe = async (): Promise<User> => {
+  const response: AxiosResponse<ApiResponse<User>> = await api.get(
+    "/api/auth/me"
   );
-  return response.data.data;
+  const user = response.data.data;
+  localStorage.setItem("user", JSON.stringify(user));
+  return user;
+};
+
+export const loginUser = async (payload: LoginPayload): Promise<string> => {
+  const response = await api.post("/api/auth/login", payload);
+  return response.data.message;
 };
 
 export const registerUser = async (
@@ -30,7 +37,12 @@ export const registerUser = async (
     "/api/auth/register",
     payload
   );
+  localStorage.setItem("user", JSON.stringify(response.data.user));
   return response.data.data;
+};
+
+export const logoutUser = async (): Promise<void> => {
+  await api.post("/api/auth/logout");
 };
 
 export const getListings = async (): Promise<Listing[]> => {
@@ -38,37 +50,42 @@ export const getListings = async (): Promise<Listing[]> => {
   return response.data;
 };
 
-export const createListing = async (payload: CreateListingPayload) => {
-  const formData = new FormData();
-  formData.append("title", payload.title);
-  formData.append("description", payload.description);
-  formData.append("pricePerDay", payload.pricePerDay.toString());
-  formData.append("location", payload.location);
-
-  payload.images.forEach((file) => {
-    formData.append("images", file);
-  });
-
-  const response = await api.post("/api/listings", formData, {
+export const createListing = async (
+  payload: CreateListingPayload
+): Promise<Listing> => {
+  const response = await api.post("/api/listings", payload, {
     headers: {
       "Content-Type": "multipart/form-data",
     },
   });
-
   return response.data;
 };
 
 export const getListingById = async (id: string): Promise<Listing> => {
   const response = await api.get(`/api/listings/${id}`);
-  return response.data;
+  return response.data.data;
 };
 
-export const updateListing = async (id: string, payload: any) => {
+export const updateListing = async (
+  id: string,
+  payload: any
+): Promise<Listing> => {
   const response = await api.put(`/api/listings/${id}`, payload);
-  return response.data;
+  return response.data.data;
 };
 
 export const deleteListing = async (id: string) => {
-  const response = await api.delete(`/api/listings/${id}`);
+  await api.delete(`/api/listings/${id}`);
+};
+
+export const createBooking = async (
+  payload: BookingPayload
+): Promise<Booking> => {
+  const response = await api.post("/api/bookings", payload);
+  return response.data.data;
+};
+
+export const getMyBookings = async (): Promise<Booking[]> => {
+  const response = await api.get("/api/bookings/my-bookings");
   return response.data;
 };
