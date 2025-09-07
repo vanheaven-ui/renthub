@@ -296,7 +296,7 @@ const HomePage = () => {
                       <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center space-x-4 rounded-3xl transition-opacity">
                         <button
                           className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
-                          onClick={() => router.push(`/listings/${listing.id}`)}
+                          onClick={() => router.push(`/listing/${listing.id}`)}
                         >
                           View
                         </button>
@@ -340,7 +340,7 @@ const HomePage = () => {
                 View My Listings
               </Link>
               <Link
-                href="/listings/create"
+                href="/listing/create"
                 className="px-6 py-3 bg-white text-purple-700 font-semibold rounded-full shadow-lg hover:bg-gray-100 transition"
               >
                 Create New Listing

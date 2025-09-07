@@ -1,11 +1,9 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/authMiddleware";
-import { createListing, getListings } from "../controllers/listingController";
+import { createListing, getListings, getListingById } from "../controllers/listingController";
 import multer from "multer";
 
 const router = Router();
-
-// Use Multer memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -13,11 +11,14 @@ const upload = multer({ storage });
 router.post(
   "/",
   authenticateToken,
-  upload.array("images", 5), // 'images' is the field name from the frontend
+  upload.array("images", 5),
   createListing
 );
 
 // GET /listings
 router.get("/", getListings);
+
+// GET /listings/:id
+router.get("/:id", getListingById);
 
 export default router;

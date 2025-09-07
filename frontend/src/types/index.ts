@@ -58,6 +58,7 @@ export interface CreateListingPayload {
   description: string;
   pricePerDay: number;
   location: string;
+  category: string;
   images: File[];
 }
 

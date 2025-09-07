@@ -177,3 +177,54 @@ export const getListings = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * Get a single listing by ID
+ * Refresh signed URLs for private bucket
+ */
+export const getListingById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ message: "Listing ID is required" });
+    }
+
+    const listing = await prisma.listing.findUnique({
+      where: { id },
+    });
+
+    if (!listing) {
+      return res.status(404).json({ message: "Listing not found" });
+    }
+
+    // Refresh signed URLs for images
+    const signedImages = await Promise.all(
+      listing.images.map(async (filePath: string) => {
+        const fileName = filePath.split("/").pop() || filePath;
+
+        const { data, error } = await supabase.storage
+          .from(supabaseBucket)
+          .createSignedUrl(fileName, 60 * 60);
+
+        if (error || !data?.signedUrl) {
+          console.error("Failed to generate signed URL:", error?.message);
+          return filePath; // fallback
+        }
+
+        return data.signedUrl;
+      })
+    );
+
+    res.status(200).json({
+      ...listing,
+      images: signedImages,
+    });
+  } catch (error) {
+    console.error("Error in getListingById:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: (error as Error).message,
+    });
+  }
+};

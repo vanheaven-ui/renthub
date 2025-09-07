@@ -36,6 +36,7 @@ const CreateListingPage = () => {
             description: "",
             pricePerDay: 0,
             location: "",
+            category: "",
             images: [],
           }}
           validationSchema={ListingSchema}
@@ -48,6 +49,8 @@ const CreateListingPage = () => {
                   {error}
                 </p>
               )}
+
+              {/* Title */}
               <div>
                 <label
                   htmlFor="title"
@@ -65,6 +68,8 @@ const CreateListingPage = () => {
                   className="text-red-500 text-xs mt-1 font-medium"
                 />
               </div>
+
+              {/* Description */}
               <div>
                 <label
                   htmlFor="description"
@@ -84,6 +89,8 @@ const CreateListingPage = () => {
                   className="text-red-500 text-xs mt-1 font-medium"
                 />
               </div>
+
+              {/* Price */}
               <div>
                 <label
                   htmlFor="pricePerDay"
@@ -102,6 +109,8 @@ const CreateListingPage = () => {
                   className="text-red-500 text-xs mt-1 font-medium"
                 />
               </div>
+
+              {/* Location */}
               <div>
                 <label
                   htmlFor="location"
@@ -119,6 +128,34 @@ const CreateListingPage = () => {
                   className="text-red-500 text-xs mt-1 font-medium"
                 />
               </div>
+
+              {/* Category */}
+              <div>
+                <label
+                  htmlFor="category"
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                >
+                  Category:
+                </label>
+                <Field
+                  as="select"
+                  name="category"
+                  className="w-full px-4 py-3 bg-white/50 backdrop-blur-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition"
+                >
+                  <option value="">Select a category</option>
+                  <option value="apartment">Apartment</option>
+                  <option value="house">House</option>
+                  <option value="villa">Villa</option>
+                  <option value="guesthouse">Guesthouse</option>
+                </Field>
+                <ErrorMessage
+                  name="category"
+                  component="div"
+                  className="text-red-500 text-xs mt-1 font-medium"
+                />
+              </div>
+
+              {/* Images */}
               <div>
                 <label
                   htmlFor="images"
@@ -144,6 +181,8 @@ const CreateListingPage = () => {
                   className="text-red-500 text-xs mt-1 font-medium"
                 />
               </div>
+
+              {/* Submit */}
               <button
                 type="submit"
                 className="w-full py-3 px-6 bg-purple-600 text-white font-semibold rounded-full shadow-lg hover:bg-purple-700 transition transform hover:scale-105"

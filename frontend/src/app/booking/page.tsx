@@ -93,8 +93,8 @@ const MyBookingsPage = () => {
               <span className="ml-1 font-bold text-purple-600">
                 {user.name || "User"}
               </span>
-              ! Here are your bookings as a{" "}
-              <span className="font-bold text-purple-600">
+              ! Here are your bookings as a
+              <span className="ml-1 font-bold text-purple-600">
                 {user.role?.toLowerCase() || "N/A"}
               </span>
               .
@@ -122,7 +122,10 @@ const MyBookingsPage = () => {
                       Listing: {booking.listingId}
                     </p>
                     <p className="text-gray-600 mt-2">
-                      Dates: {new Date(booking.startDate).toLocaleDateString()}{" "}
+                      Dates:{" "}
+                      <span className="mr-1">
+                        {new Date(booking.startDate).toLocaleDateString()}
+                      </span>
                       - {new Date(booking.endDate).toLocaleDateString()}
                     </p>
                     <p
@@ -163,7 +166,10 @@ const MyBookingsPage = () => {
                       Renter: {booking.renterId}
                     </p>
                     <p className="text-gray-600 mt-1">
-                      Dates: {new Date(booking.startDate).toLocaleDateString()}{" "}
+                      Dates:{" "}
+                      <span className="mr-1">
+                        {new Date(booking.startDate).toLocaleDateString()}
+                      </span>
                       - {new Date(booking.endDate).toLocaleDateString()}
                     </p>
                     <p
