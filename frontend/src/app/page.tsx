@@ -18,21 +18,20 @@ const categories = ["Apartment", "House", "Villa", "Cabin"];
 const HomePage = () => {
   const router = useRouter();
   const { user } = useAuth();
+  const [hoveredListing, setHoveredListing] = useState<string | null>(null);
+  const [currentImageIndex, setCurrentImageIndex] = useState<
+    Record<string, number>
+  >({});
+  const [imageError, setImageError] = useState<Record<string, boolean>>({});
+
   const {
     data: listings,
     isLoading,
     error,
   } = useQuery<Listing[]>({
-    queryKey: ["listings"],
+    queryKey: ["listings", user?.id],
     queryFn: getListings,
   });
-
-  const [hoveredListing, setHoveredListing] = useState<string | null>(null);
-  const [currentImageIndex, setCurrentImageIndex] = useState<
-    Record<string, number>
-  >({});
-
-  const [imageError, setImageError] = useState<Record<string, boolean>>({});
 
   if (isLoading)
     return (
@@ -48,7 +47,9 @@ const HomePage = () => {
       </div>
     );
 
-  // Conditional Hero Content
+  const filteredListings = listings || [];
+
+  // Render hero section based on user role
   const renderHeroContent = () => {
     if (user && user.role === "OWNER") {
       return (
@@ -157,12 +158,11 @@ const HomePage = () => {
         {renderHeroContent()}
       </div>
 
-      {/* Conditional Content based on user role */}
-
-      {/* CTA Section (Visible only when user is logged out) */}
+      {/* CTA Section for logged-out users */}
       {!user && (
         <div className="container mx-auto p-6 -mt-16 relative z-20">
           <div className="bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 rounded-3xl shadow-2xl p-12 text-center text-white flex flex-col md:flex-row justify-around items-center gap-6">
+            {/* Renter CTA */}
             <div>
               <h2 className="text-3xl font-bold mb-3">I'm a Renter</h2>
               <p className="mb-4">
@@ -181,6 +181,8 @@ const HomePage = () => {
                 Login
               </Link>
             </div>
+
+            {/* Owner CTA */}
             <div>
               <h2 className="text-3xl font-bold mb-3">I'm an Owner</h2>
               <p className="mb-4">
@@ -203,7 +205,7 @@ const HomePage = () => {
         </div>
       )}
 
-      {/* Listings Section (Visible for Renter or Logged-out users) */}
+      {/* Listings Section */}
       {(user?.role === "RENTER" || !user) && (
         <div className="container mx-auto p-6 relative z-20">
           <h2 className="text-4xl font-bold mb-8 text-center text-purple-700">
@@ -211,119 +213,127 @@ const HomePage = () => {
           </h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-            {listings?.map((listing) => {
-              const images = listing.images || [];
-              const currentIndex = currentImageIndex[listing.id] || 0;
-              const hasError = imageError[listing.id] || false;
+            {filteredListings.length === 0 ? (
+              <p className="text-center text-gray-500 col-span-full">
+                No listings available at the moment.
+              </p>
+            ) : (
+              filteredListings.map((listing) => {
+                const images = listing.images || [];
+                const currentIndex = currentImageIndex[listing.id] || 0;
+                const hasError = imageError[listing.id] || false;
 
-              return (
-                <div
-                  key={listing.id}
-                  className="relative group bg-white/40 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden transition-transform hover:scale-105 hover:shadow-3xl"
-                  onMouseEnter={() => setHoveredListing(listing.id)}
-                  onMouseLeave={() => setHoveredListing(null)}
-                >
-                  {/* Abstract shapes inside card */}
-                  <div className="absolute -top-6 -left-6 w-20 h-20 bg-pink-300 rounded-full mix-blend-multiply filter blur-2xl opacity-40 pointer-events-none"></div>
-                  <div className="absolute -bottom-6 -right-6 w-28 h-28 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 pointer-events-none"></div>
+                return (
+                  <div
+                    key={listing.id}
+                    className="relative group bg-white/40 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden transition-transform hover:scale-105 hover:shadow-3xl"
+                    onMouseEnter={() => setHoveredListing(listing.id)}
+                    onMouseLeave={() => setHoveredListing(null)}
+                  >
+                    {/* Abstract shapes inside card */}
+                    <div className="absolute -top-6 -left-6 w-20 h-20 bg-pink-300 rounded-full mix-blend-multiply filter blur-2xl opacity-40 pointer-events-none"></div>
+                    <div className="absolute -bottom-6 -right-6 w-28 h-28 bg-purple-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 pointer-events-none"></div>
 
-                  {/* Carousel / Image */}
-                  <div className="relative h-64 rounded-t-3xl overflow-hidden">
-                    {images.length > 0 && !hasError ? (
-                      <img
-                        src={images[currentIndex]}
-                        alt={listing.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        onError={() =>
-                          setImageError({ ...imageError, [listing.id]: true })
-                        }
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center w-full h-full bg-gradient-to-tr from-purple-300 via-pink-300 to-blue-300">
-                        <span className="text-white font-semibold text-lg text-center p-4">
-                          Image not available
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Carousel controls */}
-                    {images.length > 1 && hoveredListing === listing.id && (
-                      <div className="absolute inset-0 flex justify-between items-center px-3">
-                        <button
-                          className="bg-white/30 text-white p-2 rounded-full hover:bg-white/50 transition"
-                          onClick={() =>
-                            setCurrentImageIndex({
-                              ...currentImageIndex,
-                              [listing.id]:
-                                (currentIndex - 1 + images.length) %
-                                images.length,
-                            })
+                    {/* Carousel / Image */}
+                    <div className="relative h-64 rounded-t-3xl overflow-hidden">
+                      {images.length > 0 && !hasError ? (
+                        <img
+                          src={images[currentIndex]}
+                          alt={listing.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          onError={() =>
+                            setImageError({ ...imageError, [listing.id]: true })
                           }
-                        >
-                          ◀
-                        </button>
-                        <button
-                          className="bg-white/30 text-white p-2 rounded-full hover:bg-white/50 transition"
-                          onClick={() =>
-                            setCurrentImageIndex({
-                              ...currentImageIndex,
-                              [listing.id]: (currentIndex + 1) % images.length,
-                            })
-                          }
-                        >
-                          ▶
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center w-full h-full bg-gradient-to-tr from-purple-300 via-pink-300 to-blue-300">
+                          <span className="text-white font-semibold text-lg text-center p-4">
+                            Image not available
+                          </span>
+                        </div>
+                      )}
 
-                  {/* Info section with hover overlay */}
-                  <div className="p-4 relative">
-                    <h3 className="text-xl font-semibold text-purple-800 mb-1">
-                      {listing.title}
-                    </h3>
-                    <p className="text-gray-700 line-clamp-2">
-                      {listing.description}
-                    </p>
-                    <p className="text-gray-900 font-bold text-lg mt-2">
-                      ${listing.pricePerDay} / night
-                    </p>
-                    <p className="text-gray-500 text-sm mt-1">
-                      {listing.location}
-                    </p>
-
-                    {hoveredListing === listing.id && (
-                      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center space-x-4 rounded-3xl transition-opacity">
-                        <button
-                          className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
-                          onClick={() => router.push(`/listing/${listing.id}`)}
-                        >
-                          View
-                        </button>
-                        {/* Only show the 'Book' button if the user is a Renter */}
-                        {user && user.role === "RENTER" && (
+                      {/* Carousel controls */}
+                      {images.length > 1 && hoveredListing === listing.id && (
+                        <div className="absolute inset-0 flex justify-between items-center px-3">
                           <button
-                            className="px-4 py-2 bg-white text-purple-700 rounded-lg shadow hover:bg-purple-100 transition"
+                            className="bg-white/30 text-white p-2 rounded-full hover:bg-white/50 transition"
                             onClick={() =>
-                              router.push(
-                                `/booking/create?listingId=${listing.id}`
-                              )
+                              setCurrentImageIndex({
+                                ...currentImageIndex,
+                                [listing.id]:
+                                  (currentIndex - 1 + images.length) %
+                                  images.length,
+                              })
                             }
                           >
-                            Book
+                            ◀
                           </button>
-                        )}
-                      </div>
-                    )}
+                          <button
+                            className="bg-white/30 text-white p-2 rounded-full hover:bg-white/50 transition"
+                            onClick={() =>
+                              setCurrentImageIndex({
+                                ...currentImageIndex,
+                                [listing.id]:
+                                  (currentIndex + 1) % images.length,
+                              })
+                            }
+                          >
+                            ▶
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info section with hover overlay */}
+                    <div className="p-4 relative">
+                      <h3 className="text-xl font-semibold text-purple-800 mb-1">
+                        {listing.title}
+                      </h3>
+                      <p className="text-gray-700 line-clamp-2">
+                        {listing.description}
+                      </p>
+                      <p className="text-gray-900 font-bold text-lg mt-2">
+                        ${listing.pricePerDay} / night
+                      </p>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {listing.location}
+                      </p>
+
+                      {hoveredListing === listing.id && (
+                        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center space-x-4 rounded-3xl transition-opacity">
+                          <button
+                            className="px-4 py-2 bg-purple-600 text-white rounded-lg shadow hover:bg-purple-700 transition"
+                            onClick={() =>
+                              router.push(`/listing/${listing.id}`)
+                            }
+                          >
+                            View
+                          </button>
+                          {user && user.role === "RENTER" && (
+                            <button
+                              className="px-4 py-2 bg-white text-purple-700 rounded-lg shadow hover:bg-purple-100 transition"
+                              onClick={() =>
+                                router.push(
+                                  `/booking/create?listingId=${listing.id}`
+                                )
+                              }
+                            >
+                              Book
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       )}
 
-      {/* Owner-specific view (Visible only when user is an Owner) */}
+      {/* Owner-specific view */}
       {user?.role === "OWNER" && (
         <div className="container mx-auto p-6 -mt-16 relative z-20">
           <div className="bg-gradient-to-r from-purple-400 via-pink-500 to-blue-500 rounded-3xl shadow-2xl p-12 text-center text-white flex flex-col items-center gap-6">

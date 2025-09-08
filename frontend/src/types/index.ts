@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   email: string;
-  password?: string; // Optional for safety
+  password?: string;
   name?: string;
   profilePicture?: string;
   role?: Role;
@@ -41,6 +41,22 @@ export enum ListingStatus {
   SUSPENDED = "SUSPENDED",
 }
 
+export interface Review {
+  id: string;
+  rating: number;
+  comment?: string;
+
+  authorId: string;
+  author?: User; 
+
+  listingId: string;
+  listing?: Listing; 
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export interface Listing {
   id: string;
   title: string;
@@ -51,6 +67,8 @@ export interface Listing {
   images: string[];
   status: ListingStatus;
   ownerId: string;
+  owner?: User;
+  reviews?: Review[];
 }
 
 export interface CreateListingPayload {
@@ -83,4 +101,25 @@ export interface Booking {
   endDate: string;
   status: BookingStatus;
   totalPrice: number;
+  listing?: Listing;
+}
+
+// --- NEW: MESSAGES ---
+export interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  receiverId: string;
+  bookingId: string;
+  createdAt: string;
+  updatedAt: string;
+  sender?: {
+    name: string;
+  };
+}
+
+export interface SendMessagePayload {
+  bookingId: string;
+  receiverId: string;
+  content: string;
 }

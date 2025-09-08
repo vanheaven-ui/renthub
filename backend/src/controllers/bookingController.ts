@@ -118,3 +118,22 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
+export const getBookingByListing = async (req: Request, res: Response) => {
+  try {
+    const { listingId } = req.params;
+    const { userId } = req.query;
+
+    const booking = await prisma.booking.findFirst({
+      where: {
+        listingId,
+        OR: [{ renterId: String(userId) }, { ownerId: String(userId) }],
+      },
+    });
+
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    res.json(booking);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch booking" });
+  }
+};
