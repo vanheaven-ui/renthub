@@ -80,6 +80,12 @@ export interface CreateListingPayload {
   images: File[];
 }
 
+export enum PaymentStatus {
+  PENDING = "PENDING",
+  PAID = "PAID",
+  FAILED = "FAILED"
+}
+
 export enum BookingStatus {
   PENDING = "PENDING",
   CONFIRMED = "CONFIRMED",
@@ -101,6 +107,7 @@ export interface Booking {
   startDate: string;
   endDate: string;
   status: BookingStatus;
+  paymentStatus: PaymentStatus;
   totalPrice: number;
   listing?: Listing;
   renter?: User;
@@ -163,4 +170,11 @@ export interface Review {
 
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InitiatePaymentPayload {
+  bookingId: string;
+  phone_number: string;
+  full_name: string;
+  email: string;
 }

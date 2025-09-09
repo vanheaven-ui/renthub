@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient, BookingStatus } from "@prisma/client";
+import { supabase, supabaseBucket } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { emitBookingStatusUpdate } from "../lib/socketHelper";
 
@@ -85,6 +86,58 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// export const getMyBookings = async (req: AuthRequest, res: Response) => {
+//   try {
+//     const userId = req.user?.userId;
+
+//     if (!userId) {
+//       return res.status(401).json({ message: "User not authenticated." });
+//     }
+
+//     const bookings = await prisma.booking.findMany({
+//       where: {
+//         OR: [{ renterId: userId }, { ownerId: userId }],
+//       },
+//       include: {
+//         listing: {
+//           select: {
+//             title: true,
+//             location: true,
+//             images: true,
+//           },
+//         },
+//         renter: {
+//           select: {
+//             name: true,
+//             email: true,
+//           },
+//         },
+//         owner: {
+//           select: {
+//             name: true,
+//             email: true,
+//           },
+//         },
+//         messages: {
+//           select: {
+//             id: true,
+//             read: true,
+//             senderId: true,
+//             receiverId: true,
+//             createdAt: true,
+//           },
+//         },
+//       },
+//       orderBy: { createdAt: "desc" },
+//     });
+
+//     res.status(200).json(bookings);
+//   } catch (error) {
+//     console.error("Error fetching bookings:", error);
+//     res.status(500).json({ message: "Internal server error." });
+//   }
+// };
+
 export const getMyBookings = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -102,7 +155,7 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
           select: {
             title: true,
             location: true,
-            images: true,
+            images: true, // Make sure to select images to get the file paths
           },
         },
         renter: {
@@ -130,7 +183,44 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    res.status(200).json(bookings);
+    // Process each booking to get signed URLs for images
+    const processedBookings = await Promise.all(
+      bookings.map(async (booking) => {
+        // Check if the booking has a listing and images
+        if (
+          booking.listing &&
+          booking.listing.images &&
+          booking.listing.images.length > 0
+        ) {
+          const signedImages = await Promise.all(
+            booking.listing.images.map(async (filePath: string) => {
+              const { data, error } = await supabase.storage
+                .from(supabaseBucket)
+                .createSignedUrl(filePath, 60 * 60); // URL valid for 1 hour
+
+              if (error || !data?.signedUrl) {
+                console.error("Failed to generate signed URL:", error?.message);
+                return filePath; // Fallback to the original path
+              }
+
+              return data.signedUrl;
+            })
+          );
+          // Return the booking object with the updated images array
+          return {
+            ...booking,
+            listing: {
+              ...booking.listing,
+              images: signedImages,
+            },
+          };
+        }
+        // If no listing or images, return the booking as is
+        return booking;
+      })
+    );
+
+    res.status(200).json(processedBookings);
   } catch (error) {
     console.error("Error fetching bookings:", error);
     res.status(500).json({ message: "Internal server error." });

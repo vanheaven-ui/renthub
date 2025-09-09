@@ -14,6 +14,7 @@ import {
   SendMessagePayload,
   BookingStatus,
   Review,
+  InitiatePaymentPayload,
 } from "../types";
 import socket from "./socket";
 
@@ -153,6 +154,11 @@ export const getBookingByListing = async (
     params: { userId },
   });
   return res.data; // booking object
+};
+
+export const getBookingById = async (bookingId: string): Promise<Booking> => {
+  const response = await api.get(`/api/bookings/${bookingId}`);
+  return response.data;
 };
 
 // --- MESSAGES ---
@@ -300,4 +306,17 @@ export const getListingReviews = async (
 ): Promise<Review[]> => {
   const res = await api.get(`/api/listings/${listingId}/reviews`);
   return res.data;
+};
+
+export const initiatePayment = async (
+  payload: InitiatePaymentPayload
+): Promise<{ message: string; data: { link: string } }> => {
+  try {
+    const response = await api.post("/api/payments/initiate", payload);
+    return response.data;
+  } catch (error) {
+    // Axios already handles errors via the interceptor and throws a rejected promise,
+    // so we can re-throw the error or let it bubble up.
+    throw error;
+  }
 };

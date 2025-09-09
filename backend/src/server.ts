@@ -26,18 +26,11 @@ const corsOptions = {
 
 const server = http.createServer(app);
 
-initSocket(server); // Initialize the socket.io server
+initSocket(server);
 
 app.use(express.json());
 app.use(cors(corsOptions));
 app.use(cookieParser());
-
-// This middleware is no longer needed since we are importing `io` directly
-// and it's a singleton.
-// app.use((req, _res, next) => {
-//   req.io = io;
-//   next();
-// });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/listings", listingRoutes);

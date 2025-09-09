@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getListingById, createBooking } from "@/lib/api";
@@ -11,7 +11,6 @@ import { useAuth } from "@/app/context/AuthProvider";
 import {
   CalendarDaysIcon,
   CurrencyDollarIcon,
-  CheckCircleIcon,
 } from "@heroicons/react/24/solid";
 import Image from "next/image";
 
@@ -21,7 +20,6 @@ const CreateBookingPage = () => {
   const { user } = useAuth();
   const listingId = searchParams.get("listingId") || "";
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const {
     data: listing,
@@ -53,15 +51,17 @@ const CreateBookingPage = () => {
         setError("You must be logged in to create a booking.");
         return;
       }
+
       await createBooking({
         listingId,
         startDate: new Date(values.startDate),
         endDate: new Date(values.endDate),
       });
-      setSuccess("Booking confirmed! Redirecting to your bookings...");
-      setTimeout(() => router.push("/booking/my-bookings"), 1500);
+
+      // Redirect to the user's bookings page after creation
+      router.push("/my-bookings");
     } catch (err: any) {
-      console.error("Booking error:", err.message);
+      console.error("Booking creation error:", err.message);
       setError("Failed to create booking. Please try again.");
     }
   };
@@ -74,6 +74,7 @@ const CreateBookingPage = () => {
         </div>
       </div>
     );
+
   if (listingError || !listing)
     return (
       <div className="h-screen flex justify-center items-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
@@ -97,6 +98,7 @@ const CreateBookingPage = () => {
             {listing.title}
           </h2>
           <p className="text-lg text-gray-700 mb-6">{listing.location}</p>
+
           <div className="relative w-full h-64 md:h-80 lg:h-96 rounded-2xl overflow-hidden shadow-lg border-4 border-white/50">
             <Image
               src={listing.images[0] || "https://via.placeholder.com/800"}
@@ -106,6 +108,7 @@ const CreateBookingPage = () => {
               priority
             />
           </div>
+
           <div className="mt-6 text-xl font-semibold text-gray-800 flex items-center gap-2">
             <CurrencyDollarIcon className="w-6 h-6 text-pink-600" />
             <span>{listing.pricePerDay}</span>
@@ -118,17 +121,13 @@ const CreateBookingPage = () => {
           <h1 className="text-3xl font-bold mb-6 text-purple-900">
             Secure Your Stay
           </h1>
+
           {error && (
             <p className="text-red-500 text-center font-semibold mb-4">
               {error}
             </p>
           )}
-          {success && (
-            <div className="flex items-center justify-center text-green-600 text-center font-semibold mb-4">
-              <CheckCircleIcon className="w-6 h-6 mr-2" />
-              <p>{success}</p>
-            </div>
-          )}
+
           <Formik
             initialValues={{ startDate: "", endDate: "" }}
             validationSchema={BookingSchema}
@@ -198,7 +197,7 @@ const CreateBookingPage = () => {
                   {/* Confirm Button */}
                   <button
                     type="submit"
-                    className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 animate-pulse-once"
+                    className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   >
                     Confirm Booking
                   </button>

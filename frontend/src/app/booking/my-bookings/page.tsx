@@ -32,6 +32,7 @@ const MyBookingsPage = () => {
     queryFn: getMyBookings,
     enabled: !!user,
   });
+  
 
   const bookingIds = bookings?.map((b) => b.id) ?? [];
 
@@ -156,6 +157,11 @@ const MyBookingsPage = () => {
     changeStatus({ bookingId, status });
   };
 
+  // --- Checkout handler ---
+  const handleCheckout = (bookingId: string) => {
+    router.push(`/booking/${bookingId}/checkout`);
+  };
+
   // --- Active booking details ---
   const activeBooking = bookings?.find((b) => b.id === activeBookingId);
   const bookingDetails: BookingDetails | null = activeBooking
@@ -189,7 +195,7 @@ const MyBookingsPage = () => {
 
   if (!user) return null;
 
-  // Render a loading state while bookings are being fetched
+  // --- Loading state ---
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -198,7 +204,7 @@ const MyBookingsPage = () => {
     );
   }
 
-  // --- NEW: Dynamic grid class based on booking count ---
+  // --- Dynamic grid layout based on booking count ---
   let gridClass = "";
   if (bookings?.length === 1) {
     gridClass = "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-lg mx-auto";
@@ -217,7 +223,7 @@ const MyBookingsPage = () => {
           My Bookings 🗓️
         </h1>
 
-        {/* --- DYNAMIC GRID LAYOUT --- */}
+        {/* --- Bookings Grid --- */}
         <div className={`grid gap-8 ${gridClass}`}>
           {bookings?.length === 0 ? (
             <p className="text-center text-gray-500 col-span-full">
@@ -231,6 +237,7 @@ const MyBookingsPage = () => {
                 onChatClick={() => openChat(booking.id)}
                 unreadCount={unreadMap[booking.id] ?? 0}
                 onStatusChange={handleStatusChange}
+                onCheckoutClick={handleCheckout}
               />
             ))
           )}

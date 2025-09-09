@@ -32,7 +32,7 @@ const FloatingButtons = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setIsAutomatedOpen((prev) => !prev);
-    }, 2000); // Toggles every 5 seconds
+    }, 5000); // Toggles every 5 seconds
 
     // Clear the interval when the component unmounts
     return () => clearInterval(interval);
