@@ -11,6 +11,7 @@ import paymentRoutes from "./routes/paymentRoutes";
 import reviewRoutes from "./routes/reviewRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import messageRoutes from "./routes/messageRoutes";
+import userRoutes from "./routes/userRoutes";
 
 dotenv.config();
 
@@ -44,7 +45,8 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
-app.use("/api/messages", messageRoutes);
+app.use("/api/bookings", messageRoutes);
+app.use("/api/users", userRoutes)
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

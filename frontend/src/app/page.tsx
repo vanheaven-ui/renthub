@@ -49,6 +49,20 @@ const HomePage = () => {
 
   const filteredListings = listings || [];
 
+  // --- NEW: Dynamic grid class based on listing count ---
+  let gridColsClass = "";
+  if (filteredListings.length === 1) {
+    gridColsClass =
+      "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-lg mx-auto";
+  } else if (filteredListings.length === 2) {
+    gridColsClass =
+      "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 max-w-4xl mx-auto";
+  } else if (filteredListings.length === 3) {
+    gridColsClass = "grid-cols-1 md:grid-cols-3 lg:grid-cols-3 mx-auto";
+  } else {
+    gridColsClass = "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
+  }
+
   // Render hero section based on user role
   const renderHeroContent = () => {
     if (user && user.role === "OWNER") {
@@ -212,7 +226,11 @@ const HomePage = () => {
             Available Rentals
           </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          <div
+            className={`grid gap-8 ${
+              filteredListings.length > 0 ? gridColsClass : ""
+            }`}
+          >
             {filteredListings.length === 0 ? (
               <p className="text-center text-gray-500 col-span-full">
                 No listings available at the moment.

@@ -11,6 +11,7 @@ import {
   User,
   Message,
   SendMessagePayload,
+  BookingStatus,
 } from "../types";
 import socket from "./socket";
 
@@ -19,12 +20,11 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// --- CENTRALIZED ERROR HANDLING MIDDLEWARE ---
+// --- CENTRALIZED ERROR HANDLING ---
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     let errorMessage = "An unexpected error occurred. Please try again.";
-
     if (error.code === "ERR_NETWORK") {
       errorMessage = "Network error. Please check your internet connection.";
     } else if (error.response) {
@@ -44,10 +44,8 @@ api.interceptors.response.use(
           break;
         default:
           errorMessage = `Error: ${error.message}`;
-          break;
       }
     }
-
     console.error("API call failed:", errorMessage);
     return Promise.reject(new Error(errorMessage));
   }
@@ -93,21 +91,13 @@ export const createListing = async (
   payload: CreateListingPayload
 ): Promise<Listing> => {
   const formData = new FormData();
-
   formData.append("title", payload.title);
   formData.append("description", payload.description);
   formData.append("pricePerDay", payload.pricePerDay.toString());
   formData.append("location", payload.location);
-  if (payload.category) {
-    formData.append("category", payload.category);
-  }
-
-  payload.images.forEach((file) => {
-    formData.append("images", file);
-  });
-
+  if (payload.category) formData.append("category", payload.category);
+  payload.images.forEach((file) => formData.append("images", file));
   const response = await api.post("/api/listings", formData);
-
   return response.data;
 };
 
@@ -141,7 +131,6 @@ export const getMyBookings = async (): Promise<Booking[]> => {
   return response.data;
 };
 
-// Fetch booking for current user + listing
 export const getBookingByListing = async (
   listingId: string,
   userId: string
@@ -152,25 +141,28 @@ export const getBookingByListing = async (
   return res.data; // booking object
 };
 
+// --- MESSAGES ---
 // Fetch unread messages count for a booking
 export const getUnreadMessages = async (bookingId: string) => {
-  const res = await api.get(`/api/messages/${bookingId}/unread`);
+  const res = await api.get(`/api/${bookingId}/messages/unread`);
   return res.data; // { unreadCount: number }
 };
 
-// Fetch messages for a booking
-export const getBookingMessages = async (bookingId: string) => {
-  const res = await api.get(`/api/messages/${bookingId}`);
-  return res.data; // array of messages
+// Fetch all messages for a booking
+export const getBookingMessages = async (
+  bookingId: string
+): Promise<Message[]> => {
+  const res = await api.get(`/api/bookings/${bookingId}/messages`);
+  return res.data;
 };
 
-// Send a message
+// Send a message via REST
 export const sendMessage = async (
   bookingId: string,
   receiverId: string,
   content: string
 ) => {
-  const res = await api.post(`/api/messages`, {
+  const res = await api.post(`/api/bookings/${bookingId}/messages`, {
     bookingId,
     receiverId,
     content,
@@ -180,27 +172,100 @@ export const sendMessage = async (
 
 // Mark messages as read
 export const markMessagesAsRead = async (bookingId: string) => {
-  const res = await api.patch(`/api/messages/${bookingId}/read`);
+  const res = await api.patch(`/api/bookings/${bookingId}/messages/read`);
   return res.data;
 };
 
-// Join a booking room
+// Fetch unread messages in batch
+export const getUnreadMessagesBatch = async (bookingIds: string[]) => {
+  const res = await api.post("/api/bookings/unread/batch", { bookingIds });
+  return res.data; // [{ bookingId: string, unreadCount: number }]
+};
+
+// --- USER ---
+export const getUserProfile = async (userId: string): Promise<User> => {
+  const res = await api.get(`/api/users/${userId}`);
+  return res.data;
+};
+
+// --- ONLINE STATUS ---
+export const getUserOnlineStatus = async (userId: string) => {
+  const response = await api.get(`/api/bookings/online-status/${userId}`);
+  return response.data.isOnline;
+};
+
+// --- SOCKET / REAL-TIME MESSAGING ---
 export const joinBookingRoom = (bookingId: string) => {
   socket.emit("joinBookingRoom", bookingId);
 };
 
-// Send a message via socket
+export const onUpdateUnreadCount = (
+  callback: (data: { bookingId: string; count: number }) => void
+) => {
+  socket.on("updateUnreadCount", callback);
+  return () => socket.off("updateUnreadCount", callback);
+};
+
 export const sendMessageSocket = (payload: SendMessagePayload) => {
-  socket.emit("sendMessage", payload);
+  socket.emit("sendMessage", {
+    bookingId: payload.bookingId,
+    receiverId: payload.receiverId,
+    content: payload.content,
+  });
 };
 
-export const getUnreadMessagesBatch = async (bookingIds: string[]) => {
-  const res = await api.post("/api/messages/unread/batch", { bookingIds });
-  return res.data; // [{ bookingId: string, unreadCount: number }]
+export const onNewMessage = (
+  bookingId: string,
+  callback: (message: Message) => void
+) => {
+  const handler = (message: Message) => {
+    if (message.bookingId === bookingId) callback(message);
+  };
+  socket.on("newMessage", handler);
+  return () => socket.off("newMessage", handler);
 };
 
-// Function to get a user's online status
-export const getUserOnlineStatus = async (userId: string) => {
-  const response = await api.get(`/api/messages/online-status/${userId}`);
-  return response.data.isOnline;
+export const onUserTyping = (
+  bookingId: string,
+  userId: string,
+  callback: () => void
+) => {
+  const handler = (data: { bookingId: string; userId: string }) => {
+    if (data.bookingId === bookingId && data.userId !== userId) callback();
+  };
+  socket.on("userTyping", handler);
+  return () => socket.off("userTyping", handler);
+};
+
+export const onUserStoppedTyping = (
+  bookingId: string,
+  userId: string,
+  callback: () => void
+) => {
+  const handler = (data: { bookingId: string; userId: string }) => {
+    if (data.bookingId === bookingId && data.userId !== userId) callback();
+  };
+  socket.on("userStoppedTyping", handler);
+  return () => socket.off("userStoppedTyping", handler);
+};
+
+export const onUserOnlineStatus = (
+  userId: string,
+  callback: (isOnline: boolean) => void
+) => {
+  const handler = (data: { userId: string; isOnline: boolean }) => {
+    if (data.userId === userId) callback(data.isOnline);
+  };
+  socket.on("userOnlineStatus", handler);
+  return () => socket.off("userOnlineStatus", handler);
+};
+
+export const updateBookingStatus = async (
+  bookingId: string,
+  status: BookingStatus
+): Promise<Booking> => {
+  const response = await api.patch(`/api/bookings/${bookingId}/status`, {
+    status,
+  });
+  return response.data.data;
 };

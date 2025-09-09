@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getMyBookings, getUnreadMessagesBatch } from "@/lib/api";
-import { Booking } from "@/types";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  getMyBookings,
+  getUnreadMessagesBatch,
+  updateBookingStatus,
+} from "@/lib/api";
+import { Booking, BookingDetails, BookingStatus } from "@/types";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthProvider";
-import Link from "next/link";
 import BookingCard from "@/components/BookingCard";
 import BookingChat from "@/components/BookingChat";
 import socket from "@/lib/socket";
 
-// Define a type for the unread messages returned from API
 interface UnreadCount {
   bookingId: string;
   unreadCount: number;
@@ -22,179 +24,224 @@ const MyBookingsPage = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
+  const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
 
-  // Fetch bookings
-  const {
-    data: bookings,
-    isLoading,
-    error,
-  } = useQuery<Booking[]>({
+  // --- Fetch bookings ---
+  const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["myBookings", user?.id ?? ""],
     queryFn: getMyBookings,
     enabled: !!user,
   });
 
-  // Prepare booking IDs safely
-  const bookingIds: string[] = bookings?.map((b) => b.id) ?? [];
+  const bookingIds = bookings?.map((b) => b.id) ?? [];
 
-  // Fetch unread messages in batch
+  // --- Fetch unread messages ---
   const { data: unreadCounts } = useQuery<UnreadCount[]>({
     queryKey: ["unreadMessagesBatch", bookingIds],
     queryFn: () => getUnreadMessagesBatch(bookingIds),
     enabled: bookingIds.length > 0,
   });
 
-  // Map bookingId -> unreadCount
   const unreadMap: Record<string, number> = (unreadCounts ?? []).reduce(
-    (acc: Record<string, number>, item: UnreadCount) => {
+    (acc, item) => {
       acc[item.bookingId] = item.unreadCount;
       return acc;
     },
     {} as Record<string, number>
   );
 
+  // --- Socket listeners ---
   useEffect(() => {
     if (!user || !bookings) return;
 
-    // Join all booking rooms for real-time updates
-    const bookingIds = bookings.map((b) => b.id);
     bookingIds.forEach((id) => socket.emit("joinBookingRoom", id));
 
-    const handleUnreadUpdate = ({
-      bookingId,
-      count,
-    }: {
-      bookingId: string;
-      count: number;
-    }) => {
+    const handleUnreadUpdate = (data: { bookingId: string; count: number }) => {
       queryClient.setQueryData(
         ["unreadMessagesBatch", bookingIds],
-        (oldData: UnreadCount[] | undefined) => {
-          if (!oldData) return [{ bookingId, unreadCount: count }];
-          return oldData.map((item) =>
-            item.bookingId === bookingId
-              ? { ...item, unreadCount: count }
+        (old: any) =>
+          old?.map((item: UnreadCount) =>
+            item.bookingId === data.bookingId
+              ? { ...item, unreadCount: data.count }
               : item
-          );
-        }
+          ) || []
       );
     };
 
+    const handleStatusUpdate = (data: {
+      bookingId: string;
+      status: BookingStatus;
+    }) => {
+      queryClient.setQueryData<Booking[]>(
+        ["myBookings", user.id],
+        (old) =>
+          old?.map((b) =>
+            b.id === data.bookingId ? { ...b, status: data.status } : b
+          ) || []
+      );
+    };
+
+    const handleUserTyping = (data: { bookingId: string; userId: string }) => {
+      setTypingUsers((prev) => {
+        const current = prev[data.bookingId] || [];
+        if (!current.includes(data.userId)) {
+          return { ...prev, [data.bookingId]: [...current, data.userId] };
+        }
+        return prev;
+      });
+    };
+
+    const handleUserStoppedTyping = (data: {
+      bookingId: string;
+      userId: string;
+    }) => {
+      setTypingUsers((prev) => ({
+        ...prev,
+        [data.bookingId]: (prev[data.bookingId] || []).filter(
+          (id) => id !== data.userId
+        ),
+      }));
+    };
+
     socket.on("updateUnreadCount", handleUnreadUpdate);
+    socket.on("bookingStatusUpdated", handleStatusUpdate);
+    socket.on("userTyping", handleUserTyping);
+    socket.on("userStoppedTyping", handleUserStoppedTyping);
 
     return () => {
       socket.off("updateUnreadCount", handleUnreadUpdate);
+      socket.off("bookingStatusUpdated", handleStatusUpdate);
+      socket.off("userTyping", handleUserTyping);
+      socket.off("userStoppedTyping", handleUserStoppedTyping);
     };
-  }, [bookings, queryClient, user]);
+  }, [bookings, bookingIds, queryClient, user]);
 
+  // --- Open / close chat ---
   const openChat = (bookingId: string) => setActiveBookingId(bookingId);
 
   const handleCloseChat = () => {
-    // Manually set the unread count for the active booking to zero in the cache
-    queryClient.setQueryData<UnreadCount[]>(
-      ["unreadMessagesBatch", bookingIds],
-      (oldData) => {
-        if (!oldData) return [];
-        return oldData.map((item) =>
-          item.bookingId === activeBookingId
-            ? { ...item, unreadCount: 0 }
-            : item
-        );
-      }
-    );
-
+    if (activeBookingId) {
+      queryClient.setQueryData<UnreadCount[]>(
+        ["unreadMessagesBatch", bookingIds],
+        (old) =>
+          old?.map((item) =>
+            item.bookingId === activeBookingId
+              ? { ...item, unreadCount: 0 }
+              : item
+          ) || []
+      );
+    }
     setActiveBookingId(null);
   };
 
-  const shapeClass1 =
-    "absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none";
-  const shapeClass2 =
-    "absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none";
+  // --- Update booking status ---
+  const { mutate: changeStatus } = useMutation({
+    mutationFn: ({
+      bookingId,
+      status,
+    }: {
+      bookingId: string;
+      status: BookingStatus;
+    }) => updateBookingStatus(bookingId, status),
+    onSuccess: (_, { bookingId, status }) => {
+      queryClient.setQueryData<Booking[]>(
+        ["myBookings", user?.id ?? ""],
+        (old) =>
+          old?.map((b) => (b.id === bookingId ? { ...b, status } : b)) || []
+      );
+    },
+  });
 
-  if (!user) {
+  const handleStatusChange = (bookingId: string, status: BookingStatus) => {
+    changeStatus({ bookingId, status });
+  };
+
+  // --- Active booking details ---
+  const activeBooking = bookings?.find((b) => b.id === activeBookingId);
+  const bookingDetails: BookingDetails | null = activeBooking
+    ? {
+        id: activeBooking.id,
+        listingId: activeBooking.listingId,
+        renterId: activeBooking.renterId,
+        renterName:
+          user?.id === activeBooking.ownerId
+            ? activeBooking.renter?.name ?? "Renter"
+            : user?.name ?? "You",
+        renterProfile:
+          user?.id === activeBooking.ownerId
+            ? activeBooking.renter?.profilePicture
+            : user?.profilePicture,
+        ownerId: activeBooking.ownerId,
+        ownerName:
+          user?.id === activeBooking.ownerId
+            ? user.name ?? "You"
+            : activeBooking.listing?.owner?.name ?? "Owner",
+        ownerProfile:
+          user?.id === activeBooking.ownerId
+            ? user.profilePicture
+            : activeBooking.listing?.owner?.profilePicture,
+        startDate: activeBooking.startDate,
+        endDate: activeBooking.endDate,
+        status: activeBooking.status,
+        totalPrice: activeBooking.totalPrice,
+      }
+    : null;
+
+  if (!user) return null;
+
+  // Render a loading state while bookings are being fetched
+  if (isLoading) {
     return (
-      <div className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
-        <div className={shapeClass1}></div>
-        <div className={shapeClass2}></div>
-        <div className="text-center p-8 bg-white/60 backdrop-blur-sm rounded-3xl shadow-xl z-10">
-          <p className="text-xl text-purple-700 font-semibold mb-4">
-            Please log in to see your bookings.
-          </p>
-          <button
-            onClick={() => router.push("/login")}
-            className="px-8 py-3 bg-purple-600 text-white rounded-full font-semibold shadow-lg hover:bg-purple-700 transition"
-          >
-            Go to Login
-          </button>
-        </div>
+      <div className="flex justify-center items-center min-h-screen">
+        <p className="text-xl text-gray-700">Loading bookings...</p>
       </div>
     );
   }
 
-  if (isLoading)
-    return (
-      <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
-        <div className={shapeClass1}></div>
-        <div className={shapeClass2}></div>
-        <p className="text-gray-700 text-lg font-semibold z-10">
-          Loading your bookings...
-        </p>
-      </div>
-    );
-
-  if (error || !bookings || bookings.length === 0)
-    return (
-      <div className="relative min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
-        <div className={shapeClass1}></div>
-        <div className={shapeClass2}></div>
-        <div className="text-center p-8 bg-white/60 backdrop-blur-sm rounded-3xl shadow-xl z-10">
-          <p className="text-gray-700 text-xl font-semibold mb-4">
-            No bookings found.
-          </p>
-          <Link
-            href="/"
-            className="px-8 py-3 bg-purple-600 text-white rounded-full font-semibold shadow-lg hover:bg-purple-700 transition"
-          >
-            Explore Listings
-          </Link>
-        </div>
-      </div>
-    );
+  // --- NEW: Dynamic grid class based on booking count ---
+  let gridClass = "";
+  if (bookings?.length === 1) {
+    gridClass = "grid-cols-1 md:grid-cols-1 lg:grid-cols-1 max-w-lg mx-auto";
+  } else if (bookings?.length === 2) {
+    gridClass = "grid-cols-1 md:grid-cols-2 lg:grid-cols-2 max-w-4xl mx-auto";
+  } else if (bookings?.length === 3) {
+    gridClass = "grid-cols-1 md:grid-cols-3 lg:grid-cols-3 mx-auto";
+  } else {
+    gridClass = "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  }
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-6 overflow-hidden">
-      <div className={shapeClass1}></div>
-      <div className={shapeClass2}></div>
-
       <div className="container mx-auto relative z-10">
         <h1 className="text-4xl font-bold mb-8 text-purple-900 text-center drop-shadow-md">
           My Bookings 🗓️
         </h1>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {bookings.map((booking) => {
-            const unread = unreadMap[booking.id] ?? 0;
-
-            return (
-              <div key={booking.id} className="relative">
-                <BookingCard
-                  booking={booking}
-                  onChatClick={() => openChat(booking.id)}
-                  unreadCount={unread}
-                />
-              </div>
-            );
-          })}
+        {/* --- DYNAMIC GRID LAYOUT --- */}
+        <div className={`grid gap-8 ${gridClass}`}>
+          {bookings?.length === 0 ? (
+            <p className="text-center text-gray-500 col-span-full">
+              You have no bookings yet.
+            </p>
+          ) : (
+            bookings?.map((booking) => (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                onChatClick={() => openChat(booking.id)}
+                unreadCount={unreadMap[booking.id] ?? 0}
+                onStatusChange={handleStatusChange}
+              />
+            ))
+          )}
         </div>
       </div>
 
-      {activeBookingId && (
+      {activeBookingId && bookingDetails && (
         <BookingChat
           bookingId={activeBookingId}
           onClose={handleCloseChat}
-          bookingDetails={
-            bookings.find((b) => b.id === activeBookingId) ?? null
-          }
+          bookingDetails={bookingDetails}
         />
       )}
     </div>

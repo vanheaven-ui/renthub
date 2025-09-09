@@ -1,4 +1,3 @@
-// routes/messageRoutes.ts
 import { Router } from "express";
 import {
   getBookingMessages,
@@ -10,22 +9,32 @@ import {
 } from "../controllers/messageController";
 import { authenticateToken } from "../middleware/authMiddleware";
 
-const router = Router();
+const router = Router({ mergeParams: true });
 
-// fetch all messages for a booking
-router.get("/:bookingId", authenticateToken, getBookingMessages);
+// Get all messages for a booking
+router.get("/:bookingId/messages", authenticateToken, getBookingMessages);
 
-// send a new message
-router.post("/", authenticateToken, sendMessage);
+// Send a message for a booking
+router.post("/:bookingId/messages", authenticateToken, sendMessage);
 
-// get unread messages count for current user in a booking
-router.get("/:bookingId/unread", authenticateToken, getUnreadMessages);
+// Get unread messages for a booking
+router.get("/:bookingId/messages/unread", authenticateToken, getUnreadMessages);
 
-// mark messages as read
-router.patch("/:bookingId/read", authenticateToken, markMessagesAsRead);
+// Mark messages as read
+router.patch(
+  "/:bookingId/messages/read",
+  authenticateToken,
+  markMessagesAsRead
+);
 
-router.post("/unread/batch", authenticateToken, getUnreadMessagesBatch);
+// Batch unread messages (optional)
+router.post(
+  "/unread/batch",
+  authenticateToken,
+  getUnreadMessagesBatch
+);
 
+// Online status
 router.get("/online-status/:userId", authenticateToken, getOnlineStatus);
 
 export default router;

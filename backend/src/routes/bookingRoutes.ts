@@ -4,14 +4,18 @@ import {
   createBooking,
   getMyBookings,
   getBookingByListing,
+  updateBookingStatus,
+  getBookingById,
 } from "../controllers/bookingController";
 
 const router = Router();
 
-// Routes that require authentication
 router.post("/", authenticateToken, createBooking);
 router.get("/my-bookings", authenticateToken, getMyBookings);
-// GET /bookings/by-listing/:listingId?userId=xxx
 router.get("/by-listing/:listingId", authenticateToken, getBookingByListing);
+router.get("/:id", authenticateToken, getBookingById);
+
+// PATCH /bookings/:id/status
+router.patch("/:id/status", authenticateToken, updateBookingStatus);
 
 export default router;
