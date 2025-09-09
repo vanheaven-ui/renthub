@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getListingById, createBooking } from "@/lib/api";
@@ -8,17 +8,21 @@ import { Listing } from "@/types";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import { BookingSchema } from "@/validation/booking";
 import { useAuth } from "@/app/context/AuthProvider";
+import {
+  CalendarDaysIcon,
+  CurrencyDollarIcon,
+  CheckCircleIcon,
+} from "@heroicons/react/24/solid";
+import Image from "next/image";
 
 const CreateBookingPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-
   const listingId = searchParams.get("listingId") || "";
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Fetch the selected listing
   const {
     data: listing,
     isLoading,
@@ -26,13 +30,46 @@ const CreateBookingPage = () => {
   } = useQuery<Listing>({
     queryKey: ["listing", listingId],
     queryFn: () => getListingById(listingId),
-    enabled: !!listingId, // only fetch if ID exists
+    enabled: !!listingId,
   });
+
+  const calculateTotal = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate || !listing) return 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const nights = Math.ceil(
+      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return nights > 0 ? nights * listing.pricePerDay : 0;
+  };
+
+  const handleSubmit = async (values: {
+    startDate: string;
+    endDate: string;
+  }) => {
+    setError("");
+    try {
+      if (!user) {
+        setError("You must be logged in to create a booking.");
+        return;
+      }
+      await createBooking({
+        listingId,
+        startDate: new Date(values.startDate),
+        endDate: new Date(values.endDate),
+      });
+      setSuccess("Booking confirmed! Redirecting to your bookings...");
+      setTimeout(() => router.push("/booking/my-bookings"), 1500);
+    } catch (err: any) {
+      console.error("Booking error:", err.message);
+      setError("Failed to create booking. Please try again.");
+    }
+  };
 
   if (isLoading)
     return (
       <div className="h-screen flex justify-center items-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
-        <div className="text-xl font-semibold text-purple-700">
+        <div className="text-xl font-semibold text-purple-700 animate-pulse">
           Loading listing...
         </div>
       </div>
@@ -46,125 +83,130 @@ const CreateBookingPage = () => {
       </div>
     );
 
-  const handleSubmit = async (values: {
-    startDate: string;
-    endDate: string;
-  }) => {
-    setError("");
-    try {
-      if (!user) {
-        setError("You must be logged in to create a booking.");
-        return;
-      }
-
-      await createBooking({
-        listingId,
-        startDate: new Date(values.startDate),
-        endDate: new Date(values.endDate),
-      });
-
-      setSuccess("Booking created! Redirecting to your bookings...");
-      setTimeout(() => router.push("/booking/my-bookings"), 1000);
-    } catch (err: any) {
-      console.error("Booking error:", err.message);
-      setError("Failed to create booking. Please try again.");
-    }
-  };
-
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
-      {/* Background gradients and shapes */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-purple-300 via-pink-200 to-blue-200"></div>
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
+    <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-12 overflow-hidden">
+      {/* Dynamic Background Gradients */}
+      <div className="absolute inset-0 bg-gradient-to-tr from-purple-300 via-pink-200 to-blue-200 animate-gradient-slow"></div>
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob-1 pointer-events-none"></div>
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 animate-blob-2 pointer-events-none"></div>
 
-      <div className="w-full max-w-lg relative z-10 bg-white/40 backdrop-blur-md p-8 rounded-3xl shadow-2xl">
-        <h1 className="text-3xl font-bold mb-6 text-purple-900 text-center">
-          Book "{listing.title}"
-        </h1>
+      <div className="w-full max-w-6xl relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 bg-white/30 backdrop-blur-3xl p-8 rounded-[4rem] shadow-2xl transition-all duration-500 hover:shadow-3xl">
+        {/* Left Panel: Listing Preview */}
+        <div className="flex flex-col justify-between items-center text-center p-6 bg-white/20 rounded-[3rem] shadow-inner-xl transform transition-transform duration-500 hover:scale-[1.01]">
+          <h2 className="text-4xl font-extrabold text-purple-900 drop-shadow-sm leading-tight mb-4">
+            {listing.title}
+          </h2>
+          <p className="text-lg text-gray-700 mb-6">{listing.location}</p>
+          <div className="relative w-full h-64 md:h-80 lg:h-96 rounded-2xl overflow-hidden shadow-lg border-4 border-white/50">
+            <Image
+              src={listing.images[0] || "https://via.placeholder.com/800"}
+              alt={listing.title}
+              fill
+              className="object-cover"
+              priority
+            />
+          </div>
+          <div className="mt-6 text-xl font-semibold text-gray-800 flex items-center gap-2">
+            <CurrencyDollarIcon className="w-6 h-6 text-pink-600" />
+            <span>{listing.pricePerDay}</span>
+            <span className="text-sm font-normal text-gray-500">/ night</span>
+          </div>
+        </div>
 
-        <Formik
-          initialValues={{ startDate: "", endDate: "" }}
-          validationSchema={BookingSchema}
-          onSubmit={handleSubmit}
-        >
-          {() => (
-            <Form className="space-y-4">
-              {error && (
-                <p className="text-red-500 text-center font-semibold">
-                  {error}
-                </p>
-              )}
-              {success && (
-                <p className="text-green-600 text-center font-semibold">
-                  {success}
-                </p>
-              )}
-
-              {/* Read-only listing details */}
-              <div className="p-4 bg-gray-100 rounded-xl shadow-inner">
-                <p className="text-sm font-semibold text-gray-700">
-                  Listing Details
-                </p>
-                <h3 className="text-xl font-bold text-purple-800 mt-1">
-                  {listing.title}
-                </h3>
-                <p className="text-gray-600 text-sm mt-1">{listing.location}</p>
-                <p className="text-gray-900 font-bold text-lg mt-2">
-                  ${listing.pricePerDay} / night
-                </p>
-              </div>
-
-              {/* Booking dates */}
-              <div>
-                <label
-                  htmlFor="startDate"
-                  className="block text-sm font-semibold text-gray-700 mb-1"
-                >
-                  Start Date:
-                </label>
-                <Field
-                  type="date"
-                  id="startDate"
-                  name="startDate"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-400 outline-none transition"
-                />
-                <ErrorMessage
-                  name="startDate"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="endDate"
-                  className="block text-sm font-semibold text-gray-700 mb-1"
-                >
-                  End Date:
-                </label>
-                <Field
-                  type="date"
-                  id="endDate"
-                  name="endDate"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-400 outline-none transition"
-                />
-                <ErrorMessage
-                  name="endDate"
-                  component="div"
-                  className="text-red-500 text-xs mt-1"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 px-6 bg-purple-600 text-white font-semibold rounded-full shadow-lg hover:bg-purple-700 transition transform hover:scale-105"
-              >
-                Confirm Booking
-              </button>
-            </Form>
+        {/* Right Panel: Booking Form */}
+        <div className="relative flex flex-col justify-center p-8">
+          <h1 className="text-3xl font-bold mb-6 text-purple-900">
+            Secure Your Stay
+          </h1>
+          {error && (
+            <p className="text-red-500 text-center font-semibold mb-4">
+              {error}
+            </p>
           )}
-        </Formik>
+          {success && (
+            <div className="flex items-center justify-center text-green-600 text-center font-semibold mb-4">
+              <CheckCircleIcon className="w-6 h-6 mr-2" />
+              <p>{success}</p>
+            </div>
+          )}
+          <Formik
+            initialValues={{ startDate: "", endDate: "" }}
+            validationSchema={BookingSchema}
+            onSubmit={handleSubmit}
+          >
+            {({ values }) => {
+              const totalCost = calculateTotal(
+                values.startDate,
+                values.endDate
+              );
+              return (
+                <Form className="space-y-6">
+                  {/* Start Date */}
+                  <div>
+                    <label
+                      htmlFor="startDate"
+                      className="block text-sm font-semibold text-gray-700 mb-2"
+                    >
+                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-purple-500" />
+                      Check-in Date:
+                    </label>
+                    <Field
+                      type="date"
+                      id="startDate"
+                      name="startDate"
+                      className="w-full px-5 py-3 border-2 border-transparent rounded-2xl bg-white/60 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition-all duration-300 shadow-md"
+                    />
+                    <ErrorMessage
+                      name="startDate"
+                      component="div"
+                      className="text-red-500 text-xs mt-2"
+                    />
+                  </div>
+
+                  {/* End Date */}
+                  <div>
+                    <label
+                      htmlFor="endDate"
+                      className="block text-sm font-semibold text-gray-700 mb-2"
+                    >
+                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-pink-500" />
+                      Check-out Date:
+                    </label>
+                    <Field
+                      type="date"
+                      id="endDate"
+                      name="endDate"
+                      className="w-full px-5 py-3 border-2 border-transparent rounded-2xl bg-white/60 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition-all duration-300 shadow-md"
+                    />
+                    <ErrorMessage
+                      name="endDate"
+                      component="div"
+                      className="text-red-500 text-xs mt-2"
+                    />
+                  </div>
+
+                  {/* Total Cost Display */}
+                  <div className="flex justify-between items-center pt-4 border-t border-dashed border-gray-300 mt-6">
+                    <span className="text-xl font-bold text-gray-800">
+                      Total:
+                    </span>
+                    <span className="text-2xl font-extrabold text-pink-600">
+                      ${totalCost}
+                    </span>
+                  </div>
+
+                  {/* Confirm Button */}
+                  <button
+                    type="submit"
+                    className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 animate-pulse-once"
+                  >
+                    Confirm Booking
+                  </button>
+                </Form>
+              );
+            }}
+          </Formik>
+        </div>
       </div>
     </div>
   );

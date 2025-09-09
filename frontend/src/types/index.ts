@@ -107,7 +107,7 @@ export interface Booking {
   owner?: User;
 }
 
-// --- NEW: BOOKING DETAILS (used in chat) ---
+// BOOKING DETAILS (used in chat) ---
 export interface BookingDetails {
   id: string;
   listingId: string;
@@ -146,6 +146,21 @@ export interface Message {
 
 export interface SendMessagePayload {
   bookingId: string;
-  receiverId: string;
+  senderId: string;
   content: string;
+}
+
+export interface Review {
+  id: string;
+  rating: number;
+  comment?: string;
+
+  authorId: string;
+  author?: User;
+
+  listingId: string;
+  listing?: Listing;
+
+  createdAt: string;
+  updatedAt: string;
 }
