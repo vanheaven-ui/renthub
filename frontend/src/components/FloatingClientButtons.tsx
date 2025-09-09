@@ -69,7 +69,7 @@ const FloatingButtons = () => {
 
             {/* For both Renter & Owner */}
             <Link
-              href="/booking"
+              href="/booking/my-bookings"
               onClick={handleLinkClick}
               className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
             >
@@ -78,7 +78,7 @@ const FloatingButtons = () => {
             </Link>
 
             {/* Only for Renter */}
-            {user.role === "RENTER" && (
+            {/* {user.role === "RENTER" && (
               <Link
                 href="/booking/create"
                 onClick={handleLinkClick}
@@ -87,7 +87,7 @@ const FloatingButtons = () => {
                 Create Booking
                 <HomeModernIcon className="w-5 h-5" />
               </Link>
-            )}
+            )} */}
 
             {/* Only for Owner */}
             {user.role === "OWNER" && (

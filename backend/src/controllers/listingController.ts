@@ -1,4 +1,3 @@
-// backend/controllers/listingController.ts
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { AuthRequest } from "../middleware/authMiddleware";
@@ -52,7 +51,8 @@ export const createListing = async (
     const uploadedImages: string[] = [];
 
     for (const file of images) {
-      const filePath = `${Date.now()}-${file.originalname}`; // clean path
+      const filePath = `${Date.now()}-${file.originalname}`;
+
       const { error: uploadError } = await supabase.storage
         .from(supabaseBucket)
         .upload(filePath, file.buffer, {
@@ -67,20 +67,7 @@ export const createListing = async (
         });
       }
 
-      // Generate signed URL (valid for 1 hour)
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from(supabaseBucket)
-        .createSignedUrl(filePath, 60 * 60);
-
-      if (signedError || !signedData?.signedUrl) {
-        console.error("Supabase signed URL error:", signedError?.message);
-        return res.status(500).json({
-          message: "Failed to generate image URL",
-          error: signedError?.message,
-        });
-      }
-
-      uploadedImages.push(signedData.signedUrl);
+      uploadedImages.push(filePath);
     }
 
     // Save listing in DB
@@ -90,7 +77,7 @@ export const createListing = async (
         description,
         pricePerDay: Number(pricePerDay),
         location,
-        images: uploadedImages,
+        images: uploadedImages, // Save file paths, not signed URLs
         ownerId: req.user.userId,
         category,
       },
@@ -111,11 +98,13 @@ export const createListing = async (
 
 /**
  * Get listings with optional filters
- * Refresh signed URLs for private bucket
+ * Generates signed URLs for private bucket images
  */
-export const getListings = async (req: Request, res: Response) => {
+export const getListings = async (req: AuthRequest, res: Response) => {
   try {
     const { search, category, minPrice, maxPrice, location } = req.query;
+    const userId = req.user?.userId;
+
     const where: any = {};
 
     if (search) {
@@ -136,21 +125,32 @@ export const getListings = async (req: Request, res: Response) => {
       if (maxPrice) where.pricePerDay.lte = Number(maxPrice);
     }
 
+    if (userId) {
+      const myBookings = await prisma.booking.findMany({
+        where: { renterId: userId },
+        select: { listingId: true },
+      });
+
+      const bookedListingIds = myBookings.map((b) => b.listingId);
+
+      // Filter out listings the user owns or has booked
+      where.id = { notIn: bookedListingIds };
+      where.ownerId = { not: userId };
+    }
+
     const listings = await prisma.listing.findMany({
       where,
       orderBy: { createdAt: "desc" },
     });
 
-    // Refresh signed URLs for private bucket
+    // Generate signed URLs for private images
     const listingsWithUrls = await Promise.all(
       listings.map(async (listing) => {
         const signedImages = await Promise.all(
           listing.images.map(async (filePath: string) => {
-            const fileName = filePath.split("/").pop() || filePath;
-
             const { data, error } = await supabase.storage
               .from(supabaseBucket)
-              .createSignedUrl(fileName, 60 * 60);
+              .createSignedUrl(filePath, 60 * 60);
 
             if (error || !data?.signedUrl) {
               console.error("Failed to generate signed URL:", error?.message);
@@ -180,7 +180,7 @@ export const getListings = async (req: Request, res: Response) => {
 
 /**
  * Get a single listing by ID
- * Refresh signed URLs for private bucket
+ * Generates signed URLs for private bucket images
  */
 export const getListingById = async (req: Request, res: Response) => {
   try {
@@ -190,22 +190,17 @@ export const getListingById = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Listing ID is required" });
     }
 
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-    });
+    const listing = await prisma.listing.findUnique({ where: { id } });
 
     if (!listing) {
       return res.status(404).json({ message: "Listing not found" });
     }
 
-    // Refresh signed URLs for images
     const signedImages = await Promise.all(
       listing.images.map(async (filePath: string) => {
-        const fileName = filePath.split("/").pop() || filePath;
-
         const { data, error } = await supabase.storage
           .from(supabaseBucket)
-          .createSignedUrl(fileName, 60 * 60);
+          .createSignedUrl(filePath, 60 * 60);
 
         if (error || !data?.signedUrl) {
           console.error("Failed to generate signed URL:", error?.message);

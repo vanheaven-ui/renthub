@@ -15,7 +15,9 @@ export const register = async (req: Request, res: Response) => {
   const { email, password, name, role } = req.body;
 
   if (!email || !password || !role || !name) {
-    return res.status(400).json({ message: "Name, email, password, and role are required" });
+    return res
+      .status(400)
+      .json({ message: "Name, email, password, and role are required" });
   }
 
   try {
@@ -37,7 +39,7 @@ export const register = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         name,
-        role
+        role,
       },
     });
 
@@ -125,7 +127,7 @@ export const getMe = async (req: AuthRequest, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
-      select: { id: true, email: true, name: true, role: true }, 
+      select: { id: true, email: true, name: true, role: true, lastSeen: true },
     });
 
     if (!user) {

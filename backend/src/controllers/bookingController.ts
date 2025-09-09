@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, BookingStatus } from "@prisma/client";
 import { AuthRequest } from "../middleware/authMiddleware";
+import { emitBookingStatusUpdate } from "../lib/socketHelper";
 
 const prisma = new PrismaClient();
 
@@ -23,7 +24,7 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         .json({ message: "All booking fields are required." });
     }
 
-    // 1. Fetch the listing to get its price and ownerId
+    // Fetch listing
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
     });
@@ -32,20 +33,25 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: "Listing not found." });
     }
 
-    // 2. Prevent a user from booking their own listing
+    // Prevent owner booking their own listing
     if (listing.ownerId === renterId) {
       return res
         .status(403)
         .json({ message: "You cannot book your own listing." });
     }
 
-    // 3. Calculate total price based on the number of days
+    // Calculate price
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const dayCount = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+    const dayCount = Math.ceil(
+      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (dayCount <= 0) {
+      return res.status(400).json({ message: "Invalid booking dates." });
+    }
     const totalPrice = dayCount * listing.pricePerDay;
 
-    // 4. Create the booking entry in the database
+    // Create booking
     const newBooking = await prisma.booking.create({
       data: {
         listingId,
@@ -54,6 +60,8 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         startDate: start,
         endDate: end,
         totalPrice,
+        status: "PENDING",
+        paymentStatus: "PENDING",
       },
       include: {
         listing: {
@@ -109,12 +117,124 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
             email: true,
           },
         },
+        messages: {
+          select: {
+            id: true,
+            read: true,
+            senderId: true,
+            receiverId: true,
+            createdAt: true,
+          },
+        },
       },
+      orderBy: { createdAt: "desc" },
     });
 
     res.status(200).json(bookings);
   } catch (error) {
     console.error("Error fetching bookings:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+export const getBookingByListing = async (req: Request, res: Response) => {
+  try {
+    const { listingId } = req.params;
+    const { userId } = req.query;
+
+    const booking = await prisma.booking.findFirst({
+      where: {
+        listingId,
+        OR: [{ renterId: String(userId) }, { ownerId: String(userId) }],
+      },
+    });
+
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    res.json(booking);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch booking" });
+  }
+};
+
+export const getBookingById = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.userId;
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: {
+        listing: true,
+        renter: true,
+        owner: true,
+        messages: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found." });
+    }
+
+    if (booking.renterId !== userId && booking.ownerId !== userId) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to view this booking." });
+    }
+
+    res.status(200).json(booking);
+  } catch (error) {
+    console.error("Error fetching booking:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// update booking status ---
+export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+    const userId = req.user?.userId;
+
+    if (!userId)
+      return res.status(401).json({ message: "User not authenticated." });
+    if (!status)
+      return res.status(400).json({ message: "Status is required." });
+
+    // Validate status enum
+    const validStatuses = Object.values(BookingStatus);
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid booking status." });
+    }
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking)
+      return res.status(404).json({ message: "Booking not found." });
+    if (booking.ownerId !== userId)
+      return res
+        .status(403)
+        .json({ message: "Only the owner can update the booking status." });
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id },
+      data: { status },
+      include: {
+        listing: { select: { title: true, location: true } },
+        renter: { select: { name: true, email: true } },
+        owner: { select: { name: true, email: true } },
+      },
+    });
+
+    // Emit status update to renter via socket
+    emitBookingStatusUpdate(booking.renterId, updatedBooking.id, status);
+
+    res.status(200).json({
+      message: `Booking status updated to ${status}.`,
+      booking: updatedBooking,
+    });
+  } catch (error) {
+    console.error("Error updating booking status:", error);
     res.status(500).json({ message: "Internal server error." });
   }
 };

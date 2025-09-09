@@ -14,6 +14,8 @@ model User {
   name           String?
   profilePicture String?
   role           Role    @default(RENTER)
+  
+  lastSeen         DateTime?
 
   listings       Listing[]
   bookingsRenter Booking[] @relation("RenterBookings")
