@@ -8,6 +8,8 @@ import {
   HomeIcon,
   UserIcon,
   ChatBubbleLeftRightIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import { useState, useEffect } from "react";
 
@@ -27,6 +29,7 @@ const BookingCard = ({
   const { user } = useAuth();
   const [statusAnimation, setStatusAnimation] = useState(false);
   const [prevStatus, setPrevStatus] = useState(booking.status);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   if (!user) return null;
 
@@ -35,7 +38,6 @@ const BookingCard = ({
     ? booking.renter?.name ?? "Renter"
     : booking.listing?.owner?.name ?? "Owner";
 
-  // Trigger animation when status changes
   useEffect(() => {
     if (prevStatus !== booking.status) {
       setStatusAnimation(true);
@@ -45,19 +47,85 @@ const BookingCard = ({
     }
   }, [booking.status, prevStatus]);
 
+  // Construct the full image URLs
+  const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const rawImages = booking.listing?.images || [];
+  const images = rawImages.map((imagePath) => {
+    // Ensure the image path is a valid URL
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      return imagePath;
+    }
+    // Prepend the backend URL for relative paths
+    return `${backendBaseUrl}/uploads/${imagePath}`;
+  });
+
+  const hasMultipleImages = images.length > 1;
+
+  const goToNextImage = () => {
+    setCurrentImageIndex((prevIndex) => (prevIndex + 1) % images.length);
+  };
+
+  const goToPrevImage = () => {
+    setCurrentImageIndex(
+      (prevIndex) => (prevIndex - 1 + images.length) % images.length
+    );
+  };
+
   return (
     <div className="bg-white/70 backdrop-blur-md rounded-3xl shadow-xl overflow-hidden transition-transform hover:scale-105 hover:shadow-2xl">
-      {/* Image Section */}
-      <div className="relative h-56">
+      {/* Image Gallery Section */}
+      <div className="relative h-56 group">
         <img
           src={
-            booking.listing?.images?.[0] ||
+            images[currentImageIndex] ||
             "https://images.unsplash.com/photo-1560518883-ce0927974c43?auto=format&fit=crop&w=1974&q=80"
           }
           alt={booking.listing?.title || "Listing Image"}
-          className="w-full h-full object-cover rounded-t-3xl"
+          className="w-full h-full object-cover rounded-t-3xl transition-opacity duration-300 ease-in-out"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+
+        {/* Navigation Arrows */}
+        {hasMultipleImages && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                goToPrevImage();
+              }}
+              className="absolute top-1/2 left-2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+              aria-label="Previous image"
+            >
+              <ChevronLeftIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                goToNextImage();
+              }}
+              className="absolute top-1/2 right-2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+              aria-label="Next image"
+            >
+              <ChevronRightIcon className="w-5 h-5" />
+            </button>
+          </>
+        )}
+
+        {/* Navigation Dots */}
+        {hasMultipleImages && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
+            {images.map((_, index) => (
+              <span
+                key={index}
+                className={`block w-2.5 h-2.5 rounded-full transition-colors duration-300 ${
+                  index === currentImageIndex ? "bg-white" : "bg-white/50"
+                }`}
+                aria-label={`Go to image ${index + 1}`}
+              />
+            ))}
+          </div>
+        )}
+
         <div className="absolute bottom-4 left-4">
           <span className="text-sm px-3 py-1 bg-purple-600 text-white rounded-full font-semibold shadow-md">
             {isOwner ? "Owner View" : "Renter View"}

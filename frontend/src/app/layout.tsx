@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import { AuthProvider } from "./context/AuthProvider";
 import FloatingClientButtons from "../components/FloatingClientButtons";
+import ToastProvider from "../components/ToastProvider";
 
 const dmSans = DM_Sans({ subsets: ["latin"] });
 
@@ -24,6 +25,7 @@ export default function RootLayout({
           <AuthProvider>
             <main>{children}</main>
             <FloatingClientButtons />
+            <ToastProvider />
           </AuthProvider>
         </Providers>
       </body>

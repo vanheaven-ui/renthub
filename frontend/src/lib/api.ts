@@ -1,4 +1,5 @@
 import axios, { AxiosResponse, AxiosError } from "axios";
+import { toast } from "react-hot-toast";
 import {
   ApiResponse,
   LoginPayload,
@@ -12,6 +13,7 @@ import {
   Message,
   SendMessagePayload,
   BookingStatus,
+  Review,
 } from "../types";
 import socket from "./socket";
 
@@ -25,25 +27,37 @@ api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     let errorMessage = "An unexpected error occurred. Please try again.";
+
     if (error.code === "ERR_NETWORK") {
       errorMessage = "Network error. Please check your internet connection.";
+      toast.error(errorMessage);
     } else if (error.response) {
       const status = error.response.status;
       switch (status) {
         case 400:
           errorMessage = "Bad Request. Please check your input.";
+          toast.error(errorMessage);
           break;
         case 401:
-          errorMessage = "Unauthorized. Please log in.";
+          errorMessage = "Your session has expired. Please log in again.";
+          localStorage.removeItem("user");
+          toast.error(errorMessage);
+          // Redirect the user to the login page
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
           break;
         case 404:
           errorMessage = "Resource not found.";
+          toast.error(errorMessage);
           break;
         case 500:
           errorMessage = "Server error. Please try again later.";
+          toast.error(errorMessage);
           break;
         default:
           errorMessage = `Error: ${error.message}`;
+          toast.error(errorMessage);
       }
     }
     console.error("API call failed:", errorMessage);
@@ -209,7 +223,7 @@ export const onUpdateUnreadCount = (
 export const sendMessageSocket = (payload: SendMessagePayload) => {
   socket.emit("sendMessage", {
     bookingId: payload.bookingId,
-    receiverId: payload.receiverId,
+    receiverId: payload.senderId,
     content: payload.content,
   });
 };
@@ -268,4 +282,22 @@ export const updateBookingStatus = async (
     status,
   });
   return response.data.data;
+};
+
+// --- REVIEWS ---
+// Create a review for a listing
+export const createReview = async (
+  listingId: string,
+  payload: { rating: number; comment?: string }
+): Promise<Review> => {
+  const res = await api.post(`/api/listings/${listingId}/reviews`, payload);
+  return res.data;
+};
+
+// Get reviews for a listing
+export const getListingReviews = async (
+  listingId: string
+): Promise<Review[]> => {
+  const res = await api.get(`/api/listings/${listingId}/reviews`);
+  return res.data;
 };

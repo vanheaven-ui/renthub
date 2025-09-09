@@ -12,7 +12,7 @@ import {
   onUserTyping,
   onUserStoppedTyping,
   onUserOnlineStatus,
-  onUpdateUnreadCount, // 🔥 NEW
+  onUpdateUnreadCount,
   joinBookingRoom,
 } from "@/lib/api";
 import { Message, User, BookingDetails } from "@/types";
@@ -118,7 +118,6 @@ const BookingChat = ({
       setIsUserOnline(isOnline)
     );
 
-    // Unread count updates in real time
     const unsubscribeUnread = onUpdateUnreadCount((data) => {
       queryClient.setQueryData(["unreadMessages", data.bookingId], {
         unreadCount: data.count,
@@ -183,10 +182,9 @@ const BookingChat = ({
       (old: Message[] = []) => [...old, tempMessage]
     );
 
-    // Emit message
     sendMessageSocket({
       bookingId,
-      receiverId: otherUserId,
+      senderId: otherUserId,
       content: newMessage,
     });
 
@@ -217,50 +215,62 @@ const BookingChat = ({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative z-10 w-full max-w-xl mx-auto bg-white rounded-2xl shadow-2xl flex flex-col h-[70vh] overflow-hidden">
+
+      {/* Main Glassmorphic Container */}
+      <div className="relative z-10 w-full max-w-3xl mx-auto bg-gray-100/60 backdrop-blur-3xl rounded-[3rem] shadow-2xl flex flex-col h-[85vh] overflow-hidden transition-all duration-500 hover:shadow-3xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-purple-500 p-4 rounded-t-2xl flex items-center justify-between shadow-md gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="bg-white/40 backdrop-blur-md p-6 rounded-t-[3rem] flex items-center justify-between shadow-md gap-3">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative flex-shrink-0">
               {otherUserProfile ? (
                 <img
                   src={otherUserProfile}
                   alt={otherUserName}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm"
+                  className="w-14 h-14 rounded-full object-cover border-4 border-white shadow-lg"
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full border-2 border-white shadow-sm bg-gray-300 flex items-center justify-center text-gray-500">
+                <div className="w-14 h-14 rounded-full border-4 border-white shadow-lg bg-gray-300 flex items-center justify-center text-gray-500 font-bold text-2xl">
                   ?
                 </div>
               )}
               <span
-                className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                  isUserOnline ? "bg-green-400 animate-pulse" : "bg-gray-400"
+                className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
+                  isUserOnline
+                    ? "bg-green-400 animate-pulse-fast"
+                    : "bg-gray-400"
                 }`}
                 title={isUserOnline ? "Online" : "Offline"}
               />
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-white font-semibold text-lg truncate">
+              <span className="text-purple-900 font-bold text-xl truncate drop-shadow-sm">
                 {otherUserName}
               </span>
-              <span className="text-sm text-white opacity-80 truncate">
+              <span className="text-sm text-gray-600 opacity-90 truncate italic">
                 {isOtherUserTyping ? "Typing..." : getStatusText()}
               </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full text-white hover:bg-purple-700 transition"
+            className="p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors"
           >
-            <XMarkIcon className="w-6 h-6" />
+            <XMarkIcon className="w-7 h-7" />
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 p-4 space-y-4 overflow-y-auto custom-scrollbar">
+        {/* Messages with unique pattern */}
+        <div
+          className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M100 0L0 100h100V0zM0 0l100 100V0H0z' fill='%23d3d3d3' fill-opacity='0.1'/%3E%3C/svg%3E")`,
+            backgroundSize: "100px 100px", // Adjust size for subtlety
+          }}
+        >
           {isLoading && (
-            <p className="text-center text-gray-500">Loading messages...</p>
+            <p className="text-center text-gray-500 animate-pulse">
+              Loading messages...
+            </p>
           )}
           {error && (
             <p className="text-center text-red-500">Error fetching messages.</p>
@@ -273,17 +283,14 @@ const BookingChat = ({
               }`}
             >
               <div
-                className={`max-w-[75%] px-4 py-2 rounded-2xl shadow-sm ${
+                className={`max-w-[85%] md:max-w-[70%] px-5 py-3 rounded-3xl shadow-lg transition-all duration-300 ease-in-out transform ${
                   msg.senderId === user.id
-                    ? "bg-purple-500 text-white rounded-br-none"
-                    : "bg-gray-200 text-gray-800 rounded-bl-none"
+                    ? "bg-gradient-to-tr from-purple-600 to-pink-500 text-white rounded-br-none"
+                    : "bg-blue-50/70 text-gray-800 rounded-bl-none"
                 }`}
               >
-                <p className="font-semibold text-sm">
-                  {msg.sender?.name || "Unknown User"}
-                </p>
-                <p className="text-sm">{msg.content}</p>
-                <p className="text-xs text-right mt-1 opacity-70">
+                <p className="text-sm font-light">{msg.content}</p>
+                <p className="text-xs text-right mt-1 opacity-80">
                   {new Date(msg.createdAt).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -294,33 +301,51 @@ const BookingChat = ({
           ))}
           {isOtherUserTyping && (
             <div className="flex justify-start">
-              <div className="bg-gray-200 text-gray-800 rounded-2xl px-4 py-2 rounded-bl-none">
-                <p className="text-sm">{otherUserName} is typing...</p>
+              <div className="bg-blue-50/70 text-gray-800 rounded-3xl px-5 py-3 rounded-bl-none shadow-lg">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm italic">
+                    {otherUserName} is typing
+                  </span>
+                  <div className="flex space-x-1">
+                    <span
+                      className="w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
+                      style={{ animationDelay: "0s" }}
+                    ></span>
+                    <span
+                      className="w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
+                      style={{ animationDelay: "0.2s" }}
+                    ></span>
+                    <span
+                      className="w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
+                      style={{ animationDelay: "0.4s" }}
+                    ></span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
+        {/* Floating Input Area */}
         <form
           onSubmit={handleSubmit}
-          className="p-4 border-t border-gray-200 bg-white"
+          className="relative p-6 bg-white/40 backdrop-blur-md mt-auto rounded-b-[3rem] shadow-inner-xl"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <input
               type="text"
               value={newMessage}
               onChange={handleInputChange}
-              placeholder="Type your message..."
-              className="flex-1 p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition"
+              placeholder="Start a conversation..."
+              className="flex-1 bg-white/60 backdrop-blur-md border border-gray-300 rounded-full px-6 py-4 text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-purple-400 outline-none transition-all"
             />
             <button
               type="submit"
-              className="p-3 bg-purple-600 text-white rounded-full shadow-md hover:bg-purple-700 transition disabled:bg-gray-400"
+              className="bg-gradient-to-r from-purple-600 to-pink-500 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-110 disabled:opacity-50 disabled:hover:scale-100"
               disabled={!newMessage.trim()}
             >
-              <PaperAirplaneIcon className="w-6 h-6" />
+              <PaperAirplaneIcon className="w-6 h-6 transform rotate-90" />
             </button>
           </div>
         </form>

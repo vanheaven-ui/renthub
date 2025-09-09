@@ -9,20 +9,43 @@ import {
   PlusIcon,
   BuildingOfficeIcon,
   Squares2X2Icon,
+  UserPlusIcon,
+  ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const FloatingButtons = () => {
   const { user } = useAuth();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isAutomatedOpen, setIsAutomatedOpen] = useState(false);
 
-  // Only render buttons if the user is logged in
-  if (!user) {
-    return null;
-  }
+  // Determine the final menu state: open if hovering OR if automated
+  const isMenuOpen = isHovering || isAutomatedOpen;
 
+  // Handles closing the menu when a link is clicked
   const handleLinkClick = () => {
-    setIsMenuOpen(false);
+    setIsHovering(false);
+    setIsAutomatedOpen(false);
+  };
+
+  // Automated expand/collapse effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsAutomatedOpen((prev) => !prev);
+    }, 2000); // Toggles every 5 seconds
+
+    // Clear the interval when the component unmounts
+    return () => clearInterval(interval);
+  }, []); 
+
+  // If the user starts hovering, stop the automated effect
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+    setIsAutomatedOpen(false); // Manually override the automated state
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
   };
 
   return (
@@ -30,12 +53,12 @@ const FloatingButtons = () => {
       {/* Main floating shortcut menu container */}
       <div
         className="fixed top-6 right-6 z-50 w-14 h-14"
-        onMouseEnter={() => setIsMenuOpen(true)}
-        onMouseLeave={() => setIsMenuOpen(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         {/* Main button container */}
         <button
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          onClick={() => setIsHovering((prev) => !prev)}
           className="w-full h-full relative cursor-pointer"
         >
           {/* Main Icon that is visible when the menu is collapsed */}
@@ -57,56 +80,72 @@ const FloatingButtons = () => {
                 : "opacity-0 scale-95 pointer-events-none"
             }`}
           >
-            {/* New Home Link for all logged-in users */}
-            <Link
-              href="/"
-              onClick={handleLinkClick}
-              className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
-            >
-              Home
-              <HomeModernIcon className="w-5 h-5" />
-            </Link>
-
-            {/* For both Renter & Owner */}
-            <Link
-              href="/booking/my-bookings"
-              onClick={handleLinkClick}
-              className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
-            >
-              My Bookings
-              <ListBulletIcon className="w-5 h-5" />
-            </Link>
-
-            {/* Only for Renter */}
-            {/* {user.role === "RENTER" && (
-              <Link
-                href="/booking/create"
-                onClick={handleLinkClick}
-                className="flex items-center gap-2 px-6 py-3 bg-pink-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
-              >
-                Create Booking
-                <HomeModernIcon className="w-5 h-5" />
-              </Link>
-            )} */}
-
-            {/* Only for Owner */}
-            {user.role === "OWNER" && (
+            {user ? (
+              // Links for LOGGED-IN users
               <>
                 <Link
-                  href="/my-listings"
+                  href="/"
                   onClick={handleLinkClick}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                  className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
                 >
-                  My Listings
-                  <BuildingOfficeIcon className="w-5 h-5" />
+                  Home
+                  <HomeModernIcon className="w-5 h-5" />
                 </Link>
                 <Link
-                  href="/listing/create"
+                  href="/booking/my-bookings"
+                  onClick={handleLinkClick}
+                  className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                >
+                  My Bookings
+                  <ListBulletIcon className="w-5 h-5" />
+                </Link>
+                {user.role === "OWNER" && (
+                  <>
+                    <Link
+                      href="/my-listings"
+                      onClick={handleLinkClick}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                    >
+                      My Listings
+                      <BuildingOfficeIcon className="w-5 h-5" />
+                    </Link>
+                    <Link
+                      href="/listing/create"
+                      onClick={handleLinkClick}
+                      className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                    >
+                      Create Listing
+                      <PlusIcon className="w-5 h-5" />
+                    </Link>
+                  </>
+                )}
+              </>
+            ) : (
+              // Links for LOGGED-OUT users
+              <>
+                <Link
+                  href="/"
+                  onClick={handleLinkClick}
+                  className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                >
+                  Home
+                  <HomeModernIcon className="w-5 h-5" />
+                </Link>
+                <Link
+                  href="/login"
+                  onClick={handleLinkClick}
+                  className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                >
+                  Log In
+                  <ArrowRightOnRectangleIcon className="w-5 h-5" />
+                </Link>
+                <Link
+                  href="/register"
                   onClick={handleLinkClick}
                   className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
                 >
-                  Create Listing
-                  <PlusIcon className="w-5 h-5" />
+                  Register
+                  <UserPlusIcon className="w-5 h-5" />
                 </Link>
               </>
             )}
@@ -114,8 +153,7 @@ const FloatingButtons = () => {
         </button>
       </div>
 
-      {/* Bottom Button: Logout */}
-      <LogoutButton />
+      {user && <LogoutButton />}
     </>
   );
 };
