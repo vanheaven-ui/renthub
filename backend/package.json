@@ -6,9 +6,10 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "build": "npm install && tsc",
+    "build": "prisma generate && tsc",
     "dev": "ts-node-dev src/server.ts",
-    "migrate:deploy": "npx prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
