@@ -5,9 +5,9 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
-    "start": "node dist/server.js",
-    "build": "prisma generate && tsc",
     "dev": "ts-node-dev src/server.ts",
+    "build": "tsc && prisma generate",
+    "start": "node dist/server.js",
     "migrate:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate"
   },
