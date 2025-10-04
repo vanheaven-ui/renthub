@@ -1,138 +1,220 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
-import { activeUsers, io } from "../socket"; 
+import { activeUsers, io } from "../socket";
 
 const prisma = new PrismaClient();
 
+// -----------------------------
+// Types
+// -----------------------------
+interface User {
+  id: string;
+  name?: string | null;
+  profilePicture?: string | null;
+}
+
+interface Message {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  receiverId?: string | null;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  read: boolean;
+  readAt?: Date | null;
+
+  sender?: User;
+  receiver?: User;
+}
+
+interface PaginatedMessages {
+  messages: Message[];
+  hasMore: boolean;
+  nextPage: number;
+}
+
+// -----------------------------
 // GET /messages/:bookingId
+// -----------------------------
 export const getBookingMessages = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.params;
+    if (!bookingId)
+      return res.status(400).json({ error: "bookingId is required" });
+
+    const page = Number(req.query.page ?? "1");
+    const limit = Number(req.query.limit ?? "20");
+    const skip = (page - 1) * limit;
 
     const messages = await prisma.message.findMany({
       where: { bookingId },
       orderBy: { createdAt: "asc" },
+      skip,
+      take: limit,
       include: {
         sender: { select: { id: true, name: true, profilePicture: true } },
         receiver: { select: { id: true, name: true, profilePicture: true } },
       },
     });
 
-    res.json(messages);
+    const totalMessages = await prisma.message.count({ where: { bookingId } });
+
+    const response: PaginatedMessages = {
+      messages,
+      hasMore: skip + messages.length < totalMessages,
+      nextPage: page + 1,
+    };
+
+    res.json(response);
   } catch (error) {
+    console.error("Error fetching messages:", error);
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 };
 
-// POST /messages
+// -----------------------------------------------
+// POST MESSAGES
+// -----------------------------------------------
+// -----------------------------------------------
+// POST MESSAGES
+// -----------------------------------------------
 export const sendMessage = async (req: Request, res: Response) => {
   try {
-    const { bookingId, content, receiverId } = req.body;
-    const senderId = (req as any).user.userId;
+    const { bookingId, content, receiverId, tempId } = req.body;
+    const senderId = (req as any).user.userId; // Validate required fields (Your validation is correct based on the schema)
+
+    if (!bookingId || !content || !receiverId) {
+      return res.status(400).json({
+        error: "bookingId, content, and receiverId are required",
+      });
+    } // Create message in DB
 
     const newMessage = await prisma.message.create({
       data: {
         content,
-        senderId,
-        receiverId,
-        bookingId,
+        sender: { connect: { id: senderId } },
+        receiver: { connect: { id: receiverId } },
+        booking: { connect: { id: bookingId } },
       },
       include: {
         sender: { select: { id: true, name: true, profilePicture: true } },
+        receiver: { select: { id: true, name: true, profilePicture: true } },
       },
-    });
+    }); // 1. Emit via Socket.IO to the booking room (for ALL clients in the room) // This includes the tempId to allow the initiating client to find and replace the temp message
 
-    // 1. Broadcast the new message to the booking room
-    io.to(bookingId).emit("newMessage", newMessage);
+    io.to(bookingId).emit("newMessage", { ...newMessage, tempId }); // 2. Update unread count for receiver (correct)
 
-    // 2. Calculate and broadcast the updated unread count to the receiver
-    const unreadCount = await prisma.message.count({
-      where: {
+    if (receiverId !== senderId) {
+      const unreadCount = await prisma.message.count({
+        where: { bookingId, receiverId, read: false },
+      });
+      io.to(receiverId).emit("updateUnreadCount", {
         bookingId,
-        receiverId,
-        read: false,
-      },
-    });
+        count: unreadCount,
+      });
+    }
 
-    io.to(bookingId).emit("updateUnreadCount", {
-      bookingId,
-      count: unreadCount,
-    });
-
-    res.status(201).json(newMessage);
+    // 3. Send HTTP Response back to the INITIATING client.
+    // FIX: Include the tempId here so the initiating client's TanStack Query mutation
+    // has all the data it needs for success handling.
+    res.status(201).json({ ...newMessage, tempId });
   } catch (error) {
+    console.error("Error sending message:", error);
     res.status(500).json({ error: "Failed to send message" });
   }
 };
 
-// GET /messages/:bookingId/unread
-export const getUnreadMessages = async (req: Request, res: Response) => {
-  try {
-    const { bookingId } = req.params;
-    const userId = (req as any).user.userId;
-
-    const count = await prisma.message.count({
-      where: {
-        bookingId,
-        receiverId: userId,
-        read: false,
-      },
-    });
-
-    res.json({ unreadCount: count });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch unread messages" });
-  }
-};
-
+// -----------------------------
 // PATCH /messages/:bookingId/read
+// -----------------------------
 export const markMessagesAsRead = async (req: Request, res: Response) => {
   try {
     const { bookingId } = req.params;
     const userId = (req as any).user.userId;
+    if (!bookingId)
+      return res.status(400).json({ error: "bookingId is required" });
 
-    await prisma.message.updateMany({
-      where: {
-        bookingId,
-        receiverId: userId,
-        read: false,
-      },
-      data: { read: true },
+    const updated = await prisma.message.updateMany({
+      where: { bookingId, receiverId: userId, read: false },
+      data: { read: true, readAt: new Date() },
     });
+
+    if (updated.count > 0) {
+      io.to(userId).emit("updateUnreadCount", { bookingId, count: 0 });
+
+      const readMessages = await prisma.message.findMany({
+        where: { bookingId, receiverId: userId, read: true },
+        select: { id: true, senderId: true, readAt: true },
+      });
+
+      readMessages.forEach((msg) => {
+        io.to(msg.senderId).emit("messageRead", {
+          messageId: msg.id,
+          bookingId,
+          readAt: msg.readAt,
+        });
+      });
+    }
 
     res.json({ success: true });
   } catch (error) {
+    console.error("Error marking messages as read:", error);
     res.status(500).json({ error: "Failed to mark messages as read" });
   }
 };
 
-export const getUnreadMessagesBatch = async (req: Request, res: Response) => {
+// -----------------------------
+// GET /messages/:bookingId/unread
+// -----------------------------
+export const getUnreadMessages = async (req: Request, res: Response) => {
   try {
-    const { bookingIds } = req.body; // expect array of booking IDs
-    if (!bookingIds || !Array.isArray(bookingIds))
-      return res.status(400).json({ error: "bookingIds required" });
+    const { bookingId } = req.params;
+    const userId = (req as any).user.userId;
+    if (!bookingId)
+      return res.status(400).json({ error: "bookingId is required" });
 
-    const unreadCounts = await Promise.all(
-      bookingIds.map(async (id: string) => {
-        const count = await prisma.message.count({
-          where: {
-            bookingId: id,
-            receiverId: (req as any).user.userId,
-            read: false,
-          },
-        });
-        return { bookingId: id, unreadCount: count };
-      })
-    );
+    const unreadCount = await prisma.message.count({
+      where: { bookingId, receiverId: userId, read: false },
+    });
 
-    res.json(unreadCounts);
-  } catch (err) {
-    console.error(err);
+    res.json({ unreadCount });
+  } catch (error) {
+    console.error("Error fetching unread messages:", error);
     res.status(500).json({ error: "Failed to fetch unread messages" });
   }
 };
 
+// -----------------------------
+// POST /messages/unread/batch
+// -----------------------------
+export const getUnreadMessagesBatch = async (req: Request, res: Response) => {
+  try {
+    const { bookingIds } = req.body;
+    if (!bookingIds || !Array.isArray(bookingIds))
+      return res.status(400).json({ error: "bookingIds required" });
+
+    const userId = (req as any).user.userId;
+
+    const counts = await Promise.all(
+      bookingIds.map(async (id: string) => {
+        const unreadCount = await prisma.message.count({
+          where: { bookingId: id, receiverId: userId, read: false },
+        });
+        return { bookingId: id, unreadCount };
+      })
+    );
+
+    res.json(counts);
+  } catch (error) {
+    console.error("Error fetching unread messages batch:", error);
+    res.status(500).json({ error: "Failed to fetch unread messages" });
+  }
+};
+
+// -----------------------------
 // GET /online-status/:userId
+// -----------------------------
 export const getOnlineStatus = async (req: Request, res: Response) => {
   const { userId } = req.params;
   const isOnline = activeUsers.has(userId);

@@ -3,7 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import http from "http";
-import { initSocket, io } from "./socket"; 
+import { initSocket, io } from "./socket";
 import authRoutes from "./routes/authRoutes";
 import listingRoutes from "./routes/listingRoutes";
 import bookingRoutes from "./routes/bookingRoutes";
@@ -12,6 +12,7 @@ import reviewRoutes from "./routes/reviewRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import messageRoutes from "./routes/messageRoutes";
 import userRoutes from "./routes/userRoutes";
+import aiRoutes from "./routes/aiRoutes";
 
 dotenv.config();
 
@@ -39,7 +40,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/bookings", messageRoutes);
-app.use("/api/users", userRoutes)
+app.use("/api/users", userRoutes);
+app.use("/api/ai", aiRoutes);
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {

@@ -14,8 +14,8 @@ model User {
   name           String?
   profilePicture String?
   role           Role    @default(RENTER)
-  
-  lastSeen         DateTime?
+
+  lastSeen DateTime?
 
   listings       Listing[]
   bookingsRenter Booking[] @relation("RenterBookings")
@@ -44,6 +44,7 @@ model Listing {
 
   bookings Booking[]
   reviews  Review[]
+  rules    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -75,21 +76,18 @@ model Booking {
 }
 
 model Message {
-  id      String  @id @default(uuid())
-  content String
-  read    Boolean @default(false)
-
-  sender   User   @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  senderId String
-
-  receiver   User   @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  bookingId  String
+  senderId   String
   receiverId String
-
-  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  bookingId String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  content    String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  read       Boolean   @default(false)
+  readAt     DateTime? // Added for read receipts
+  booking    Booking   @relation(fields: [bookingId], references: [id])
+  sender     User      @relation("SentMessages", fields: [senderId], references: [id])
+  receiver   User      @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }
 
 model Review {
