@@ -11,16 +11,31 @@ import {
   EyeSlashIcon,
 } from "@heroicons/react/24/solid";
 
+/**
+ * Defines the structure of the values in the registration form.
+ * This resolves the 'unexpected any' error on the handleSubmit function's 'values' parameter.
+ */
+interface RegisterFormValues {
+  name: string;
+  email: string;
+  password: string;
+  role: "RENTER" | "OWNER";
+}
+
 const Register = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // if role query param is passed (eg: /register?role=OWNER)
   const initialRole =
     (searchParams.get("role") as "RENTER" | "OWNER") || "RENTER";
+
   const [role, setRole] = useState<"RENTER" | "OWNER">(initialRole);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = async (values: any) => {
+  // Type definition added here
+  const handleSubmit = async (values: RegisterFormValues) => {
     setError("");
     try {
       await registerUser({ ...values, role }); // include selected role
@@ -31,12 +46,15 @@ const Register = () => {
     }
   };
 
+  // --- new flag: disable renter selection if forced owner ---
+  const isOwnerOnly = initialRole === "OWNER";
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center overflow-x-hidden">
+    <div className="relative min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center overflow-hidden">
       {/* Abstract background shapes */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
-      
+
       {/* Back to Listings */}
       <button
         onClick={() => router.push("/")}
@@ -51,8 +69,13 @@ const Register = () => {
           Register
         </h1>
 
-        <Formik
-          initialValues={{ name: "", email: "", password: "" }}
+        <Formik<RegisterFormValues> // Type argument added here
+          initialValues={{
+            name: "",
+            email: "",
+            password: "",
+            role: initialRole,
+          }}
           validationSchema={RegisterSchema}
           onSubmit={handleSubmit}
         >
@@ -119,7 +142,7 @@ const Register = () => {
               />
             </div>
 
-            {/* Role selection buttons */}
+            {/* Role selection */}
             <div className="mt-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Select Role:
@@ -127,12 +150,13 @@ const Register = () => {
               <div className="flex justify-between gap-2">
                 <button
                   type="button"
+                  disabled={isOwnerOnly} // renter disabled if ?role=OWNER
                   className={`flex-1 py-2 rounded-full font-semibold ${
                     role === "RENTER"
                       ? "bg-purple-600 text-white"
                       : "bg-gray-200 text-gray-700"
-                  }`}
-                  onClick={() => setRole("RENTER")}
+                  } ${isOwnerOnly ? "opacity-50 cursor-not-allowed" : ""}`}
+                  onClick={() => !isOwnerOnly && setRole("RENTER")}
                 >
                   Renter
                 </button>

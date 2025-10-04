@@ -11,6 +11,7 @@ import {
   UserIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "../context/AuthProvider";
+import LoadingScreen from "@/components/LoadingScreen";
 
 const MyBookingsPage = () => {
   const { user } = useAuth();
@@ -42,13 +43,7 @@ const MyBookingsPage = () => {
   }
 
   if (isLoading)
-    return (
-      <div className="h-screen flex justify-center items-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
-        <p className="text-xl text-purple-700 animate-pulse">
-          Loading your bookings...
-        </p>
-      </div>
-    );
+    return <LoadingScreen message="Loading your bookings..." />
 
   if (error)
     return (

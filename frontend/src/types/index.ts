@@ -1,17 +1,20 @@
-export interface User {
-  id: string;
-  email: string;
-  password?: string;
-  name?: string;
-  profilePicture?: string;
-  role?: Role;
-  lastSeen?: string;
+// ----------------- GENERIC API RESPONSE -----------------
+export interface ApiResponse<T> {
+  message?: string;
+  data: T;
 }
 
-export enum Role {
-  RENTER = "RENTER",
-  OWNER = "OWNER",
-  ADMIN = "ADMIN",
+// ----------------- AUTH -----------------
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  name: string;
+  role: "RENTER" | "OWNER";
 }
 
 export interface AuthResponse {
@@ -19,79 +22,45 @@ export interface AuthResponse {
   token: string;
 }
 
-export interface ApiResponse<T> {
-  data: T;
-  user: T;
-  message: string;
-}
-
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
-
-export interface RegisterPayload {
-  name: string;
-  email: string;
-  password: string;
-}
-
-export enum ListingStatus {
-  PENDING = "PENDING",
-  APPROVED = "APPROVED",
-  SUSPENDED = "SUSPENDED",
-}
-
-export interface Review {
+export interface User {
   id: string;
-  rating: number;
-  comment?: string;
-
-  authorId: string;
-  author?: User;
-
-  listingId: string;
-  listing?: Listing;
-
-  createdAt: string;
-  updatedAt: string;
+  name?: string | null;
+  email: string;
+  profilePicture?: string | null;
+  role?: "RENTER" | "OWNER" | "ADMIN";
+  lastSeen?: string | null; // ISO string
 }
 
+// ----------------- LISTINGS -----------------
 export interface Listing {
   id: string;
   title: string;
   description: string;
   pricePerDay: number;
   location: string;
-  category: string;
   images: string[];
-  status: ListingStatus;
-  ownerId: string;
-  owner?: User;
   reviews?: Review[];
+  category?: string | null;
+  status?: "PENDING" | "APPROVED" | "SUSPENDED";
+  owner?: User | null;
+  alreadyBooked?: boolean;
+  bookings?: Booking[];
 }
 
+// Updated payload to support editing removed images
 export interface CreateListingPayload {
   title: string;
   description: string;
   pricePerDay: number;
   location: string;
-  category: string;
   images: File[];
+  category?: string;
+  removedImages?: string[]; // Optional for edit
 }
 
-export enum PaymentStatus {
-  PENDING = "PENDING",
-  PAID = "PAID",
-  FAILED = "FAILED"
-}
-
-export enum BookingStatus {
-  PENDING = "PENDING",
-  CONFIRMED = "CONFIRMED",
-  CANCELED = "CANCELED",
-  COMPLETED = "COMPLETED",
-}
+// ----------------- BOOKINGS -----------------
+export type BookingStatus = "PENDING" | "CONFIRMED" | "CANCELED" | "COMPLETED";
+export type PaymentStatus = "PENDING" | "PAID" | "FAILED";
 
 export interface BookingPayload {
   listingId: string;
@@ -106,75 +75,142 @@ export interface Booking {
   ownerId: string;
   startDate: string;
   endDate: string;
+  totalPrice: number;
   status: BookingStatus;
   paymentStatus: PaymentStatus;
-  totalPrice: number;
-  listing?: Listing;
-  renter?: User;
-  owner?: User;
+  transactionId?: string | null;
+  listing?: {
+    id: string;
+    title: string;
+    location: string;
+    images: string[];
+    owner?: User | null;
+  };
+  renter?: User | null;
+  owner?: User | null;
+  messages?: Message[];
+  totalAmount?: number;
+  createdAt: string;
 }
 
-// BOOKING DETAILS (used in chat) ---
 export interface BookingDetails {
   id: string;
   listingId: string;
   renterId: string;
   renterName: string;
-  renterProfile?: string;
+  renterProfile?: string | null;
   ownerId: string;
   ownerName: string;
-  ownerProfile?: string;
+  ownerProfile?: string | null;
   startDate: string;
   endDate: string;
   status: BookingStatus;
   totalPrice: number;
 }
 
+// ----------------- MESSAGES -----------------
 export interface Message {
   id: string;
-  content: string;
+  bookingId: string;
   senderId: string;
   receiverId: string;
-  bookingId: string;
+  content: string;
   createdAt: string;
   updatedAt: string;
-  read: boolean; 
-  sender: {
-    id: string; 
-    name: string;
-    profilePicture: string; 
+  read: boolean;
+  readAt?: string | null;
+  sender?: {
+    id: string;
+    name?: string | null;
+    profilePicture?: string | null;
   };
   receiver?: {
     id: string;
-    name: string;
-    profilePicture: string;
+    name?: string | null;
+    profilePicture?: string | null;
   };
+  tempId?: string; // For optimistic UI updates
+}
+
+export interface PaginatedMessages {
+  messages: Message[];
+  hasMore: boolean;
+  nextPage: number;
 }
 
 export interface SendMessagePayload {
   bookingId: string;
   senderId: string;
   content: string;
+  receiverId?: string;
+  tempId?: string;
 }
 
+// ----------------- REVIEWS -----------------
 export interface Review {
   id: string;
-  rating: number;
-  comment?: string;
-
-  authorId: string;
-  author?: User;
-
   listingId: string;
-  listing?: Listing;
-
+  authorId: string;
+  author: User;
+  rating: number;
+  comment?: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
+// ----------------- PAYMENTS -----------------
 export interface InitiatePaymentPayload {
   bookingId: string;
-  phone_number: string;
+  amount: number;
+  currency: string;
   full_name: string;
   email: string;
+  phone_number: string;
+}
+
+export interface PaymentRequest {
+  bookingId: string;
+  full_name: string;
+  email: string;
+  phone_number: string;
+}
+
+export interface PaymentResponse {
+  message: string;
+  data?: {
+    link?: string;
+  };
+}
+
+// ----------------- CHAT / SOCKET TYPES -----------------
+export interface OnlineStatus {
+  userId: string;
+  isOnline: boolean;
+}
+
+export interface UnreadCount {
+  bookingId: string;
+  unreadCount: number;
+}
+
+// ----------------- AI / GENERATIVE TYPES -----------------
+export interface AskExpertPayload {
+  question: string;
+  listingId?: string;
+}
+
+export interface AskExpertResponse {
+  success: boolean;
+  question: string;
+  answer: string;
+  source: string;
+  contextUsed: boolean;
+}
+
+export interface GenerateDescriptionPayload {
+  basicDetails: string;
+}
+
+export interface GenerateDescriptionResponse {
+  success: boolean;
+  generatedDescription: string;
 }

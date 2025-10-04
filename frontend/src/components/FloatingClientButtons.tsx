@@ -13,8 +13,10 @@ import {
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import { useState, useEffect } from "react";
+// 🎯 Import the new, repositioned AI component
+import HubScoutWidget from "./HubScoutWidget"; 
 
-const FloatingButtons = () => {
+const FloatingClientButtons = () => {
   const { user } = useAuth();
   const [isHovering, setIsHovering] = useState(false);
   const [isAutomatedOpen, setIsAutomatedOpen] = useState(false);
@@ -31,17 +33,21 @@ const FloatingButtons = () => {
   // Automated expand/collapse effect
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsAutomatedOpen((prev) => !prev);
+      // Only toggle if the user is not actively hovering
+      if (!isHovering) {
+        setIsAutomatedOpen((prev) => !prev);
+      }
     }, 5000); // Toggles every 5 seconds
 
     // Clear the interval when the component unmounts
     return () => clearInterval(interval);
-  }, []); 
+  }, [isHovering]); // Re-run effect if isHovering changes
 
   // If the user starts hovering, stop the automated effect
   const handleMouseEnter = () => {
     setIsHovering(true);
-    setIsAutomatedOpen(false); // Manually override the automated state
+    // Note: No need to explicitly set setIsAutomatedOpen(false) here,
+    // as the useEffect dependency array handles pausing the toggle loop.
   };
 
   const handleMouseLeave = () => {
@@ -50,7 +56,10 @@ const FloatingButtons = () => {
 
   return (
     <>
-      {/* Main floating shortcut menu container */}
+      {/* 🎯 1. AI Hub Scout - Placed bottom-LEFT (new position) */}
+      <HubScoutWidget />
+
+      {/* 2. Main floating shortcut menu container - Placed top-RIGHT (original position) */}
       <div
         className="fixed top-6 right-6 z-50 w-14 h-14"
         onMouseEnter={handleMouseEnter}
@@ -102,7 +111,7 @@ const FloatingButtons = () => {
                 {user.role === "OWNER" && (
                   <>
                     <Link
-                      href="/my-listings"
+                      href="/listing/my-listings"
                       onClick={handleLinkClick}
                       className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
                     >
@@ -112,7 +121,7 @@ const FloatingButtons = () => {
                     <Link
                       href="/listing/create"
                       onClick={handleLinkClick}
-                      className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
+                      className="flex items-center gap-2 px-6 py-3 bg-pink-500 text-white font-semibold rounded-full shadow-lg transition-all duration-200 ease-in-out transform hover:scale-105 active:scale-95"
                     >
                       Create Listing
                       <PlusIcon className="w-5 h-5" />
@@ -153,9 +162,10 @@ const FloatingButtons = () => {
         </button>
       </div>
 
+      {/* 3. Logout Button - Assumed to be bottom-RIGHT (this component needs to be updated if LogoutButton is fixed bottom-right, otherwise it will still overlap HubScout) */}
       {user && <LogoutButton />}
     </>
   );
 };
 
-export default FloatingButtons;
+export default FloatingClientButtons;

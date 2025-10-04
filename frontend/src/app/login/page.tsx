@@ -12,6 +12,12 @@ import {
 } from "@heroicons/react/24/solid";
 import { useAuth } from "../context/AuthProvider";
 
+// Define the expected shape of the form values to resolve the 'any' error
+interface LoginValues {
+  email: string;
+  password: string;
+}
+
 const Login = () => {
   const router = useRouter();
   const { login } = useAuth();
@@ -19,7 +25,8 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (values: any) => {
+  // Use the defined LoginValues interface for type safety
+  const handleSubmit = async (values: LoginValues) => {
     setError("");
     setIsSubmitting(true);
     try {
@@ -38,7 +45,6 @@ const Login = () => {
       // Step 3: Update frontend auth state
       login(user);
 
-      // Step 4: Redirect
       router.push("/");
     } catch (err) {
       console.error(err);
@@ -49,12 +55,9 @@ const Login = () => {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center overflow-x-hidden">
-      {/* Abstract background shapes */}
+    <div className="relative min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center overflow-hidden">
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
-
-      {/* Back to Listings */}
       <button
         onClick={() => router.push("/")}
         className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 text-white font-semibold rounded-full shadow-lg hover:scale-105 transform transition group z-50"
@@ -129,10 +132,8 @@ const Login = () => {
             </button>
           </Form>
         </Formik>
-
-        {/* Link to Register */}
         <p className="mt-4 text-center text-gray-600">
-          Don't have an account?
+          Don&apos;t have an account? {/* Corrected unescaped apostrophe */}
           <span
             onClick={() => router.push("/register")}
             className="text-purple-600 font-semibold cursor-pointer hover:underline ml-1"

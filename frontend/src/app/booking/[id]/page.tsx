@@ -7,11 +7,12 @@ import {
   joinBookingRoom,
   sendMessageSocket,
 } from "@/lib/api";
-import { Message, SendMessagePayload } from "@/types";
+import { Message, SendMessagePayload, PaginatedMessages } from "@/types";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/app/context/AuthProvider";
 import socket from "@/lib/socket";
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function BookingMessagesPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
@@ -23,19 +24,27 @@ export default function BookingMessagesPage() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- Fetch initial messages ---
-  const { data: initialMessages = [], isLoading } = useQuery<Message[]>({
+  // --- Fetch initial messages with pagination ---
+  const { data: paginatedMessages, isLoading } = useQuery<
+    PaginatedMessages,
+    Error
+  >({
     queryKey: ["messages", bookingId],
-    queryFn: () => getBookingMessages(bookingId),
+    queryFn: async (): Promise<PaginatedMessages> => {
+      if (!bookingId) return { messages: [], hasMore: false, nextPage: 1 };
+      return await getBookingMessages(bookingId);
+    },
     enabled: !!bookingId,
+    initialData: { messages: [], hasMore: false, nextPage: 1 },
   });
 
-  // Initialize messages once fetched
   useEffect(() => {
-    setMessages(initialMessages);
-  }, [initialMessages]);
+    if (paginatedMessages && paginatedMessages.messages.length > 0) {
+      setMessages(paginatedMessages.messages);
+    }
+  }, [paginatedMessages]); // Run this effect when paginatedMessages changes
 
-  // Scroll to the bottom of the chat on new messages
+  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -44,10 +53,8 @@ export default function BookingMessagesPage() {
   useEffect(() => {
     if (!bookingId || !currentUserId) return;
 
-    // Join booking room
     joinBookingRoom(bookingId);
 
-    // Listen for incoming messages
     const handleReceiveMessage = (msg: Message) => {
       setMessages((prev) => [...prev, msg]);
     };
@@ -64,7 +71,6 @@ export default function BookingMessagesPage() {
       setTypingUsers((prev) => prev.filter((id) => id !== userId));
     };
 
-    // Subscribe to socket events
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("userTyping", handleUserTyping);
     socket.on("userStoppedTyping", handleUserStoppedTyping);
@@ -86,7 +92,6 @@ export default function BookingMessagesPage() {
       content: message,
     };
 
-    // Send message via Socket.IO
     sendMessageSocket(payload);
 
     // Optimistic UI update
@@ -119,7 +124,7 @@ export default function BookingMessagesPage() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
-      {/* Dynamic Background Gradients */}
+      {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-tr from-purple-300 via-pink-200 to-blue-200 animate-gradient-slow"></div>
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob-1 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 animate-blob-2 pointer-events-none"></div>
@@ -132,13 +137,9 @@ export default function BookingMessagesPage() {
           </h1>
         </div>
 
-        {/* Messages Container */}
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-          {isLoading ? (
-            <p className="text-gray-600 text-center animate-pulse">
-              Loading messages...
-            </p>
-          ) : (
+          {isLoading ? <LoadingScreen message="Loading messages" /> : (
             messages.map((msg) => (
               <div
                 key={msg.id}
@@ -166,7 +167,7 @@ export default function BookingMessagesPage() {
               </div>
             ))
           )}
-          {/* Typing indicator bubble */}
+
           {typingUsers.length > 0 && (
             <div className="flex justify-start">
               <div className="px-5 py-3 rounded-3xl bg-white/80 text-gray-800 rounded-bl-none shadow-lg max-w-[75%]">
@@ -179,24 +180,25 @@ export default function BookingMessagesPage() {
                     <span
                       className="block w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
                       style={{ animationDelay: "0s" }}
-                    ></span>
+                    />
                     <span
                       className="block w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
                       style={{ animationDelay: "0.2s" }}
-                    ></span>
+                    />
                     <span
                       className="block w-2 h-2 bg-gray-500 rounded-full animate-bounce-dot"
                       style={{ animationDelay: "0.4s" }}
-                    ></span>
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Floating Input Area */}
+        {/* Input */}
         <div className="relative p-6 bg-white/40 backdrop-blur-md rounded-b-[3rem] mt-auto">
           <div className="flex items-center gap-4">
             <input

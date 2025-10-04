@@ -1,3 +1,5 @@
+"use client";
+
 import {
   CalendarDaysIcon,
   CurrencyDollarIcon,
@@ -24,15 +26,12 @@ const BookingCard = ({
   onCheckoutClick,
 }: BookingCardProps) => {
   const { user } = useAuth();
-  
-  // --- Role & Permissions ---
+
   const isRenter = user?.id === booking.renterId;
   const isOwner = user?.id === booking.ownerId;
   const showPaymentButton = isRenter && booking.paymentStatus === "PENDING";
   const showOwnerButtons = isOwner && booking.status === "PENDING";
 
-  // --- Helpers ---
-  // FIX: The formatDate function now accepts a string, resolving the type error.
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
@@ -57,25 +56,37 @@ const BookingCard = ({
 
   return (
     <div className="relative p-6 bg-white/50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden group transition-all duration-500 hover:scale-[1.03] transform">
-      {/* --- Background Hover Gradient --- */}
       <div className="absolute inset-0 bg-gradient-to-br from-pink-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-
-      {/* --- Card Content --- */}
       <div className="relative z-10 flex flex-col h-full">
         {/* Listing Image */}
         <div className="relative w-full h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white mb-4">
-          <Image
-            src={
-              booking.listing?.images[0] ||
-              "https://via.placeholder.com/800"
-            }
-            alt={booking.listing?.title ?? "Listing image"}
-            fill
-            className="object-cover"
-          />
+          {booking.listing?.images?.[0] ? (
+            <Image
+              src={`/${booking.listing.images[0]}`}
+              alt={booking.listing?.title ?? "Listing image"}
+              fill
+              className="object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-12 h-12 text-gray-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M3 7h18M3 12h18M3 17h18"
+                />
+              </svg>
+            </div>
+          )}
         </div>
 
-        {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-xl font-bold text-gray-900 leading-tight">
             {booking.listing?.title}
@@ -89,22 +100,18 @@ const BookingCard = ({
           </span>
         </div>
 
-        {/* Details */}
         <div className="text-sm text-gray-600 space-y-2 flex-grow">
           <div className="flex items-center">
             <UserCircleIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
               {isRenter
-                ? // FIX: Use optional chaining for owner name
-                  `Owner: ${booking.owner?.name}`
-                : // FIX: Use optional chaining for renter name
-                  `Renter: ${booking.renter?.name}`}
+                ? `Owner: ${booking.owner?.name}`
+                : `Renter: ${booking.renter?.name}`}
             </span>
           </div>
           <div className="flex items-center">
             <CalendarDaysIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
-              {/* FIX: Now pass the string directly, which the helper function expects */}
               {formatDate(booking.startDate)} - {formatDate(booking.endDate)}
             </span>
           </div>
@@ -114,9 +121,7 @@ const BookingCard = ({
           </div>
         </div>
 
-        {/* Actions */}
         <div className="mt-6 flex flex-col space-y-4">
-          {/* Checkout (Renter) */}
           {showPaymentButton && (
             <button
               onClick={() => onCheckoutClick(booking.id)}
@@ -129,11 +134,9 @@ const BookingCard = ({
             </button>
           )}
 
-          {/* Owner Actions */}
           {showOwnerButtons && (
             <div className="grid grid-cols-2 gap-4">
               <button
-                // FIX: Explicitly cast the string to the enum type
                 onClick={() =>
                   onStatusChange(booking.id, "CONFIRMED" as BookingStatusEnum)
                 }
@@ -142,7 +145,6 @@ const BookingCard = ({
                 Accept
               </button>
               <button
-                // FIX: Explicitly cast the string to the enum type
                 onClick={() =>
                   onStatusChange(booking.id, "CANCELED" as BookingStatusEnum)
                 }
@@ -153,7 +155,6 @@ const BookingCard = ({
             </div>
           )}
 
-          {/* Chat */}
           <button
             onClick={onChatClick}
             className="w-full px-4 py-3 text-sm font-semibold text-purple-700 bg-purple-100 rounded-xl shadow-lg transition-all duration-300 transform hover:scale-105 hover:bg-purple-200"

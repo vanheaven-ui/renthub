@@ -2,34 +2,25 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getListingById, createReview } from "@/lib/api";
-import { Listing, Review } from "@/types";
+import { Listing } from "@/types";
 import Image from "next/image";
 import { Formik, Form, Field, ErrorMessage } from "formik";
-import * as Yup from "yup";
-import { useRouter, useSearchParams } from "next/navigation"; // Import useSearchParams
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/context/AuthProvider";
 import { StarIcon } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
-
-const ReviewSchema = Yup.object().shape({
-  rating: Yup.number()
-    .required("Rating is required")
-    .min(1, "Minimum rating is 1")
-    .max(5, "Maximum rating is 5"),
-  comment: Yup.string().optional(),
-});
+import LoadingScreen from "@/components/LoadingScreen";
+import { ReviewSchema } from "@/validation/review";
 
 const ListingPage = ({ params }: { params: { id: string } }) => {
   const { id } = params;
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [imageLoading, setImageLoading] = useState(true);
 
-  // Get the booking end date from the URL
   const bookingEndDateString = searchParams.get("endDate");
 
   const {
@@ -50,11 +41,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen text-lg text-gray-500">
-        Loading listing details...
-      </div>
-    );
+    return <LoadingScreen message="Loading listing details..." />;
   }
 
   if (error || !listing) {
@@ -65,17 +52,16 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
     );
   }
 
-  // Logic to determine if the review form should be shown
+  // Show review form only if renter and booking ends today
   const isRenter = user?.role === "RENTER";
   let showReviewForm = false;
   if (isRenter && bookingEndDateString) {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Normalize today's date to midnight
+    today.setHours(0, 0, 0, 0);
 
     const endDate = new Date(bookingEndDateString);
-    endDate.setHours(0, 0, 0, 0); // Normalize end date to midnight
+    endDate.setHours(0, 0, 0, 0);
 
-    // Compare the normalized dates
     if (today.getTime() === endDate.getTime()) {
       showReviewForm = true;
     }
@@ -83,15 +69,14 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 py-10 overflow-hidden">
-      {/* Abstract shapes for background aesthetic */}
+      {/* Background shapes */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
 
       <div className="relative container mx-auto max-w-5xl z-10 px-4 sm:px-6 lg:px-8">
         <div className="bg-white/50 backdrop-blur-md shadow-2xl rounded-3xl overflow-hidden p-6 md:p-10">
-          {/* Image and Primary Info */}
+          {/* Image & Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
-            {/* Image Section with Loading State */}
             <div className="relative h-64 md:h-full w-full rounded-2xl overflow-hidden shadow-lg">
               {imageLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
@@ -110,14 +95,13 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
               />
             </div>
 
-            {/* Content Section */}
             <div className="flex flex-col justify-between">
               <div>
                 <h1 className="text-4xl sm:text-5xl font-extrabold text-purple-900 mb-2 drop-shadow-sm leading-tight">
                   {listing.title}
                 </h1>
                 <p className="text-3xl font-bold text-pink-600 mb-4">
-                  ${listing.pricePerDay} / night
+                  Ugx {listing.pricePerDay} / night
                 </p>
                 <div className="flex items-center text-gray-600 mb-6">
                   <svg
@@ -139,23 +123,34 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                 </p>
               </div>
 
-              {/* Book Now Button for Renters */}
+              {/* Book Button */}
               {isRenter && (
-                <Link
-                  href={`/booking/create?listingId=${id}`}
-                  className="w-full text-center px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
-                >
-                  Book Your Dream Stay
-                </Link>
+                <>
+                  {!listing.alreadyBooked ? (
+                    <Link
+                      href={`/booking/create?listingId=${id}`}
+                      className="w-full text-center px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                    >
+                      Book Your Dream Stay
+                    </Link>
+                  ) : (
+                    <button
+                      className="w-full text-center px-8 py-4 bg-gray-300 text-gray-600 font-bold rounded-full shadow cursor-not-allowed"
+                      disabled
+                    >
+                      Already Booked
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
 
           <hr className="my-10 border-gray-200" />
 
-          {/* About the Owner & Reviews Section */}
+          {/* Owner & Reviews */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
-            {/* About the Owner Section */}
+            {/* Owner Info */}
             <div>
               <h2 className="text-2xl font-bold mb-4 text-purple-800 flex items-center">
                 <UserCircleIcon className="w-8 h-8 mr-2 text-pink-500" />
@@ -184,7 +179,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
               </div>
             </div>
 
-            {/* Reviews Section */}
+            {/* Reviews */}
             <div>
               <h2 className="text-2xl font-bold mb-4 text-purple-800">
                 Reviews ({listing.reviews?.length || 0})
@@ -227,7 +222,8 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                       </div>
                       {review.comment && (
                         <p className="text-gray-600 text-sm italic">
-                          "{review.comment}"
+                          &apos;{review.comment}&apos;{" "}
+                          {/* FIX: Escaped single quotes to resolve lint error (react/no-unescaped-entities) */}
                         </p>
                       )}
                     </div>
@@ -237,7 +233,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                 <p className="text-gray-500 italic mb-6">No reviews yet.</p>
               )}
 
-              {/* Conditionally rendered Add Review Form */}
+              {/* Add Review Form */}
               {showReviewForm && (
                 <>
                   <h3 className="text-xl font-bold mb-4 text-purple-800 mt-6">
@@ -247,9 +243,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                     initialValues={{ rating: 5, comment: "" }}
                     validationSchema={ReviewSchema}
                     onSubmit={(values, { resetForm }) => {
-                      mutation.mutate(values, {
-                        onSuccess: () => resetForm(),
-                      });
+                      mutation.mutate(values, { onSuccess: () => resetForm() });
                     }}
                   >
                     {({ isSubmitting }) => (
@@ -290,7 +284,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                         </div>
                         <button
                           type="submit"
-                          disabled={isSubmitting || mutation.isPending}
+                          disabled={isSubmitting || mutation.isPending} // ✅ Updated
                           className="w-full bg-purple-600 text-white font-semibold py-3 rounded-xl hover:bg-purple-700 transition-all duration-300 transform hover:scale-[1.01]"
                         >
                           {mutation.isPending
