@@ -1,8 +1,6 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Formik, Form, Field, ErrorMessage } from "formik";
@@ -18,22 +16,21 @@ import { BookingSchema } from "@/validation/booking";
 import LoadingScreen from "@/components/LoadingScreen";
 import { useAuth } from "@/app/context/AuthProvider";
 
-const CreateBookingPage = () => {
+// Force full client rendering
+export const dynamic = "force-dynamic";
+
+// Wrap main content in a separate component
+const BookingForm: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const listingId = searchParams.get("listingId") || "";
 
-  // 1. New state to track client mounting
-  const [isMounted, setIsMounted] = useState(false);
-
   const { user } = useAuth();
+  const [isMounted, setIsMounted] = useState(false);
   const [error, setError] = useState<string>("");
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
-  // 2. Set isMounted to true only after client hydration
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  useEffect(() => setIsMounted(true), []);
 
   // Fetch listing details
   const {
@@ -43,13 +40,11 @@ const CreateBookingPage = () => {
   } = useQuery<Listing>({
     queryKey: ["listing", listingId],
     queryFn: () => getListingById(listingId),
-    // 3. Ensure listing query runs only if listingId exists AND we are mounted
     enabled: !!listingId && isMounted,
   });
 
-  // Fetch current user's bookings for this listing (client-side only)
+  // Fetch user's bookings for this listing
   useEffect(() => {
-    // 4. Guard against running on the server
     if (!user || !isMounted) return;
 
     getMyBookings()
@@ -64,11 +59,9 @@ const CreateBookingPage = () => {
 
   const calculateTotal = (startDate: string, endDate: string): number => {
     if (!startDate || !endDate || !listing) return 0;
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
     const nights = Math.ceil(
-      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+      (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+        (1000 * 60 * 60 * 24)
     );
     return nights > 0 ? nights * listing.pricePerDay : 0;
   };
@@ -91,7 +84,6 @@ const CreateBookingPage = () => {
     endDate: string;
   }) => {
     setError("");
-
     if (!user) {
       setError("You must be logged in to create a booking.");
       return;
@@ -123,14 +115,9 @@ const CreateBookingPage = () => {
     }
   };
 
-  // 5. Handle the initial server render and client hydration state
-  if (!isMounted) {
-    // Return null or a basic placeholder on the server
-    return <LoadingScreen message="Initializing..." />;
-  }
-
+  // Show loading screen before client hydration
+  if (!isMounted) return <LoadingScreen message="Initializing..." />;
   if (isLoading) return <LoadingScreen message="Loading listing details..." />;
-
   if (listingError || !listing)
     return (
       <div className="h-screen flex justify-center items-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100">
@@ -142,7 +129,7 @@ const CreateBookingPage = () => {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-12 overflow-hidden">
-      {/* Background Gradients */}
+      {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-tr from-purple-300 via-pink-200 to-blue-200 animate-gradient-slow"></div>
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob-1 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 animate-blob-2 pointer-events-none"></div>
@@ -200,7 +187,7 @@ const CreateBookingPage = () => {
                       htmlFor="startDate"
                       className="block text-sm font-semibold text-gray-700 mb-2"
                     >
-                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-purple-500" />
+                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-purple-500" />{" "}
                       Check-in Date:
                     </label>
                     <Field
@@ -222,7 +209,7 @@ const CreateBookingPage = () => {
                       htmlFor="endDate"
                       className="block text-sm font-semibold text-gray-700 mb-2"
                     >
-                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-pink-500" />
+                      <CalendarDaysIcon className="w-5 h-5 inline-block mr-1 text-pink-500" />{" "}
                       Check-out Date:
                     </label>
                     <Field
@@ -248,15 +235,13 @@ const CreateBookingPage = () => {
                     </span>
                   </div>
 
-                  {/* Confirm Button */}
+                  {/* Buttons */}
                   <button
                     type="submit"
                     className="w-full py-4 px-6 bg-gradient-to-r from-purple-600 to-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
                   >
                     Confirm Booking
                   </button>
-
-                  {/* Cancel Button */}
                   <button
                     type="button"
                     onClick={() => router.back()}
@@ -274,4 +259,13 @@ const CreateBookingPage = () => {
   );
 };
 
-export default CreateBookingPage;
+// Main export with Suspense wrapper
+export default function CreateBookingPage() {
+  return (
+    <Suspense
+      fallback={<LoadingScreen message="Initializing booking page..." />}
+    >
+      <BookingForm />
+    </Suspense>
+  );
+}
