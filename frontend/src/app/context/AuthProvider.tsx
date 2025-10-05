@@ -1,4 +1,3 @@
-// frontend/hooks/useAuth.ts
 "use client";
 
 import {
@@ -11,12 +10,13 @@ import {
 import { useRouter } from "next/navigation";
 import { User } from "@/types";
 import { getMe, loginUser, registerUser, logoutUser } from "@/lib/api";
+import { RegisterPayload } from "@/types"; // Import the type from your types file
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: any) => Promise<void>;
+  register: (data: RegisterPayload) => Promise<void>; // Updated type
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // ✅ Load user from localStorage when client mounts
+  // Load user from localStorage when client mounts
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedUser = localStorage.getItem("user");
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(false);
   }, []);
 
-  // ✅ Refresh session (checks with backend)
+  // Refresh session (checks with backend)
   const refreshUser = async () => {
     try {
       const me = await getMe();
@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ Login
+  // Login
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
@@ -61,8 +61,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ Register
-  const register = async (data: any) => {
+  // Register
+  const register = async (data: RegisterPayload) => {
     setLoading(true);
     try {
       const { user } = await registerUser(data);
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ✅ Logout
+  // Logout
   const logout = async () => {
     await logoutUser();
     localStorage.removeItem("user");
