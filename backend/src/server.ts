@@ -49,7 +49,7 @@ app.get("/", (_req, res) => {
     environment: process.env.NODE_ENV || "development",
     timestamp: new Date().toISOString(),
     uptime: `${process.uptime().toFixed(2)} seconds`,
-    documentation: "https://renthub-api-docs.vercel.app", 
+    documentation: "https://renthub-docs.vercel.app", 
   });
 });
 
