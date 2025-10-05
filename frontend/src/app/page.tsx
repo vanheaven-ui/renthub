@@ -7,7 +7,7 @@ import { Listing } from "@/types";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./context/AuthProvider";
 import Link from "next/link";
-import Image from "next/image"; // Import Next.js Image component
+import Image from "next/image"; 
 import {
   CurrencyDollarIcon,
   CalendarDaysIcon,

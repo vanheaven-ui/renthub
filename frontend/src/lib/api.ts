@@ -236,6 +236,10 @@ export const updateListing = async (
   return data.data;
 };
 
+export const deleteListing = async (id: string): Promise<void> => {
+  await api.delete(`/api/listings/${id}`);
+};
+
 // ----------------- Bookings -----------------
 export const createBooking = async (
   payload: BookingPayload
