@@ -143,7 +143,7 @@ export interface SendMessagePayload {
   senderId: string;
   content: string;
   receiverId?: string;
-  tempId?: string;
+  tempId: string;
 }
 
 // ----------------- REVIEWS -----------------
