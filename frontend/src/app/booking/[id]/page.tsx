@@ -86,10 +86,13 @@ export default function BookingMessagesPage() {
   const handleSend = () => {
     if (!message.trim() || !currentUserId) return;
 
-    const payload: SendMessagePayload = {
+    const tempId = Math.random().toString(36).substring(2);
+
+    const payload: SendMessagePayload & { tempId: string } = {
       bookingId,
       senderId: currentUserId,
       content: message,
+      tempId,
     };
 
     sendMessageSocket(payload);
@@ -99,7 +102,7 @@ export default function BookingMessagesPage() {
       ...prev,
       {
         ...payload,
-        id: Math.random().toString(36).substring(2),
+        id: tempId,
         receiverId: "",
         read: false,
         createdAt: new Date().toISOString(),
@@ -139,7 +142,9 @@ export default function BookingMessagesPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-          {isLoading ? <LoadingScreen message="Loading messages" /> : (
+          {isLoading ? (
+            <LoadingScreen message="Loading messages" />
+          ) : (
             messages.map((msg) => (
               <div
                 key={msg.id}

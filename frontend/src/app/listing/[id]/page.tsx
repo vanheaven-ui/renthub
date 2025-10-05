@@ -284,7 +284,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                         </div>
                         <button
                           type="submit"
-                          disabled={isSubmitting || mutation.isPending} // ✅ Updated
+                          disabled={isSubmitting || mutation.isPending} 
                           className="w-full bg-purple-600 text-white font-semibold py-3 rounded-xl hover:bg-purple-700 transition-all duration-300 transform hover:scale-[1.01]"
                         >
                           {mutation.isPending
