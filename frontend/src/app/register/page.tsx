@@ -1,8 +1,6 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
-import { useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Formik, Field, Form, ErrorMessage } from "formik";
 import { registerUser } from "@/lib/api";
@@ -13,10 +11,6 @@ import {
   EyeSlashIcon,
 } from "@heroicons/react/24/solid";
 
-/**
- * Defines the structure of the values in the registration form.
- * This resolves the 'unexpected any' error on the handleSubmit function's 'values' parameter.
- */
 interface RegisterFormValues {
   name: string;
   email: string;
@@ -24,23 +18,29 @@ interface RegisterFormValues {
   role: "RENTER" | "OWNER";
 }
 
-const Register = () => {
+export const dynamic = "force-dynamic";
+
+// Main form component
+const RegisterForm: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // if role query param is passed (eg: /register?role=OWNER)
+  // Delay until client hydration to avoid SSR errors
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+
   const initialRole =
     (searchParams.get("role") as "RENTER" | "OWNER") || "RENTER";
-
   const [role, setRole] = useState<"RENTER" | "OWNER">(initialRole);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Type definition added here
+  if (!isMounted) return <div>Loading...</div>;
+
   const handleSubmit = async (values: RegisterFormValues) => {
     setError("");
     try {
-      await registerUser({ ...values, role }); // include selected role
+      await registerUser({ ...values, role });
       router.push("/login");
     } catch (err) {
       console.error(err);
@@ -48,16 +48,15 @@ const Register = () => {
     }
   };
 
-  // --- new flag: disable renter selection if forced owner ---
   const isOwnerOnly = initialRole === "OWNER";
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 flex items-center justify-center overflow-hidden">
-      {/* Abstract background shapes */}
+      {/* Background Shapes */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
 
-      {/* Back to Listings */}
+      {/* Back Button */}
       <button
         onClick={() => router.push("/")}
         className="absolute top-6 z-50 left-6 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 via-pink-500 to-blue-500 text-white font-semibold rounded-full shadow-lg hover:scale-105 transform transition group"
@@ -66,12 +65,13 @@ const Register = () => {
         Back to Listings
       </button>
 
+      {/* Form */}
       <div className="p-8 pt-20 bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10">
         <h1 className="text-3xl font-bold mb-6 text-center text-purple-700">
           Register
         </h1>
 
-        <Formik<RegisterFormValues> // Type argument added here
+        <Formik<RegisterFormValues>
           initialValues={{
             name: "",
             email: "",
@@ -152,7 +152,7 @@ const Register = () => {
               <div className="flex justify-between gap-2">
                 <button
                   type="button"
-                  disabled={isOwnerOnly} // renter disabled if ?role=OWNER
+                  disabled={isOwnerOnly}
                   className={`flex-1 py-2 rounded-full font-semibold ${
                     role === "RENTER"
                       ? "bg-purple-600 text-white"
@@ -183,7 +183,6 @@ const Register = () => {
               Register
             </button>
 
-            {/* Link to Login */}
             <p className="text-center text-sm mt-4">
               Already have an account?{" "}
               <button
@@ -201,4 +200,11 @@ const Register = () => {
   );
 };
 
-export default Register;
+// Export wrapped in Suspense
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div>Loading registration page...</div>}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
