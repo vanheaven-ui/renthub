@@ -3,28 +3,29 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { getListingById, createBooking, getMyBookings } from "@/lib/api";
-import { Listing, Booking } from "@/types";
 import { Formik, Form, Field, ErrorMessage } from "formik";
-import { BookingSchema } from "@/validation/booking";
-import { useAuth } from "@/app/context/AuthProvider";
+import Image from "next/image";
 import {
   CalendarDaysIcon,
   CurrencyDollarIcon,
 } from "@heroicons/react/24/solid";
-import Image from "next/image";
+
+import { getListingById, createBooking, getMyBookings } from "@/lib/api";
+import { Listing, Booking } from "@/types";
+import { BookingSchema } from "@/validation/booking";
 import LoadingScreen from "@/components/LoadingScreen";
+import { useAuth } from "@/app/context/AuthProvider";
 
 const CreateBookingPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
   const listingId = searchParams.get("listingId") || "";
 
-  const [error, setError] = useState("");
+  const { user } = useAuth();
+  const [error, setError] = useState<string>("");
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
-  // Fetch listing
+  // Fetch listing details
   const {
     data: listing,
     isLoading,
@@ -35,20 +36,23 @@ const CreateBookingPage = () => {
     enabled: !!listingId,
   });
 
-  // Fetch current user bookings for this listing
+  // Fetch current user's bookings for this listing (client-side only)
   useEffect(() => {
-    if (user) {
-      getMyBookings().then((bookings) => {
+    if (!user) return;
+
+    getMyBookings()
+      .then((bookings) => {
         const filtered = bookings.filter(
           (b) => b.listingId === listingId && b.renterId === user.id
         );
         setUserBookings(filtered);
-      });
-    }
+      })
+      .catch((err) => console.error("Failed to fetch user bookings:", err));
   }, [user, listingId]);
 
-  const calculateTotal = (startDate: string, endDate: string) => {
+  const calculateTotal = (startDate: string, endDate: string): number => {
     if (!startDate || !endDate || !listing) return 0;
+
     const start = new Date(startDate);
     const end = new Date(endDate);
     const nights = Math.ceil(
@@ -57,7 +61,10 @@ const CreateBookingPage = () => {
     return nights > 0 ? nights * listing.pricePerDay : 0;
   };
 
-  const hasOverlap = (startDate: string, endDate: string) => {
+  const hasOverlap = (
+    startDate: string,
+    endDate: string
+  ): Booking | undefined => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return userBookings.find((booking) => {
@@ -96,17 +103,11 @@ const CreateBookingPage = () => {
         startDate: new Date(values.startDate),
         endDate: new Date(values.endDate),
       });
-
       router.push("/booking/my-bookings");
-    } catch (err) {
-      if (err instanceof Error) {
-        console.error("Booking creation error:", err.message);
-        setError(err.message);
-      } else {
-        // Fallback for non-standard error objects
-        console.error("Booking creation error:", err);
-        setError("An unexpected error occurred. Please try again.");
-      }
+    } catch (err: unknown) {
+      if (err instanceof Error) setError(err.message);
+      else setError("An unexpected error occurred. Please try again.");
+      console.error("Booking creation failed:", err);
     }
   };
 
@@ -160,12 +161,6 @@ const CreateBookingPage = () => {
           {error && (
             <div className="p-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-lg mb-4 shadow-md animate-fadeIn">
               <p className="font-semibold">{error}</p>
-              {error.includes("from") && (
-                <div className="mt-2 text-sm text-red-800">
-                  ⚠️ Please select different dates that do not overlap your
-                  existing booking.
-                </div>
-              )}
             </div>
           )}
 
@@ -243,7 +238,7 @@ const CreateBookingPage = () => {
                     Confirm Booking
                   </button>
 
-                  {/* --- Unique Cancel Button --- */}
+                  {/* Cancel Button */}
                   <button
                     type="button"
                     onClick={() => router.back()}
@@ -262,5 +257,3 @@ const CreateBookingPage = () => {
 };
 
 export default CreateBookingPage;
-
-export const dynamic = "force-dynamic";
