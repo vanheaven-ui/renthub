@@ -23,9 +23,17 @@ const CreateBookingPage = () => {
   const searchParams = useSearchParams();
   const listingId = searchParams.get("listingId") || "";
 
+  // 1. New state to track client mounting
+  const [isMounted, setIsMounted] = useState(false);
+
   const { user } = useAuth();
   const [error, setError] = useState<string>("");
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
+
+  // 2. Set isMounted to true only after client hydration
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Fetch listing details
   const {
@@ -35,12 +43,14 @@ const CreateBookingPage = () => {
   } = useQuery<Listing>({
     queryKey: ["listing", listingId],
     queryFn: () => getListingById(listingId),
-    enabled: !!listingId,
+    // 3. Ensure listing query runs only if listingId exists AND we are mounted
+    enabled: !!listingId && isMounted,
   });
 
   // Fetch current user's bookings for this listing (client-side only)
   useEffect(() => {
-    if (!user) return;
+    // 4. Guard against running on the server
+    if (!user || !isMounted) return;
 
     getMyBookings()
       .then((bookings) => {
@@ -50,7 +60,7 @@ const CreateBookingPage = () => {
         setUserBookings(filtered);
       })
       .catch((err) => console.error("Failed to fetch user bookings:", err));
-  }, [user, listingId]);
+  }, [user, listingId, isMounted]);
 
   const calculateTotal = (startDate: string, endDate: string): number => {
     if (!startDate || !endDate || !listing) return 0;
@@ -112,6 +122,12 @@ const CreateBookingPage = () => {
       console.error("Booking creation failed:", err);
     }
   };
+
+  // 5. Handle the initial server render and client hydration state
+  if (!isMounted) {
+    // Return null or a basic placeholder on the server
+    return <LoadingScreen message="Initializing..." />;
+  }
 
   if (isLoading) return <LoadingScreen message="Loading listing details..." />;
 
