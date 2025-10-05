@@ -26,9 +26,7 @@ import {
   GenerateDescriptionResponse,
 } from "../types";
 
-// --------------------------------------
-// ✅ Types
-// --------------------------------------
+// Types for custom axios config and backend errors
 interface CustomAxiosRequestConfig extends AxiosRequestConfig {
   silenceToast?: boolean;
 }
@@ -37,9 +35,7 @@ interface BackendErrorResponse {
   message?: string;
 }
 
-// --------------------------------------
-// ✅ Axios Instance
-// --------------------------------------
+// Axios instance
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 const api = axios.create({
@@ -47,9 +43,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// --------------------------------------
-// ✅ Centralized Error Handling
-// --------------------------------------
+// Centralized error handling
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
@@ -68,7 +62,7 @@ api.interceptors.response.use(
       switch (status) {
         case 400:
           errorMessage =
-            backendErrorMsg || "Bad Request. Please check your input.";
+            backendErrorMsg || "Bad request. Please check your input.";
           break;
         case 401:
           errorMessage = "Your session has expired. Please log in again.";
@@ -93,9 +87,7 @@ api.interceptors.response.use(
   }
 );
 
-// --------------------------------------
-// 🔐 AUTH API
-// --------------------------------------
+// Auth APIs
 export const getMe = async (): Promise<User> => {
   const res: AxiosResponse<ApiResponse<User>> = await api.get("/api/auth/me", {
     silenceToast: true,
@@ -127,11 +119,10 @@ export const logoutUser = async (): Promise<void> => {
   await api.post("/api/auth/logout");
 };
 
-// --------------------------------------
-// 💬 Messaging (Socket.IO + HTTP)
-// --------------------------------------
+// Socket instance for messaging
 const socket: Socket = ClientIO(API_BASE, { withCredentials: true });
 
+// Messaging APIs
 export const sendMessageHttp = async (
   payload: SendMessagePayload & { tempId: string }
 ): Promise<Message & { tempId: string }> => {
@@ -164,7 +155,7 @@ export const joinBookingRoom = (bookingId: string) => {
   socket.emit("joinRoom", { bookingId });
 };
 
-// ✅ Get messages for a booking (paginated)
+// Get messages for a booking (paginated)
 export const getBookingMessages = async (
   bookingId: string,
   page = 1,
@@ -176,21 +167,33 @@ export const getBookingMessages = async (
   return res.data;
 };
 
-// ✅ Fetch all bookings for the current authenticated user
+// Mark all messages in a booking as read
+export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
+  await api.post(`/api/bookings/${bookingId}/messages/read`);
+};
 
+// Bookings API
 export const getMyBookings = async (): Promise<Booking[]> => {
   const res = await api.get<Booking[]>("/api/bookings/my-bookings");
   return res.data;
 };
 
-// ✅ Mark all messages in a booking as read
-export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
-  await api.post(`/api/bookings/${bookingId}/messages/read`);
+export const createBooking = async (
+  payload: BookingPayload
+): Promise<Booking> => {
+  const res: AxiosResponse<ApiResponse<Booking>> = await api.post(
+    "/api/bookings",
+    payload
+  );
+  return res.data.data;
 };
 
-// --------------------------------------
-// 📦 Listings API
-// --------------------------------------
+export const getBookingById = async (bookingId: string): Promise<Booking> => {
+  const res = await api.get<Booking>(`/api/bookings/${bookingId}`);
+  return res.data;
+};
+
+// Listings API
 export const getListings = async (): Promise<Listing[]> => {
   const res = await api.get<Listing[]>("/api/listings");
   return res.data;
@@ -212,27 +215,21 @@ export const createListing = async (formData: FormData): Promise<Listing> => {
   return data.data;
 };
 
-// --------------------------------------
-// 📅 Bookings API
-// --------------------------------------
-export const createBooking = async (
-  payload: BookingPayload
-): Promise<Booking> => {
-  const res: AxiosResponse<ApiResponse<Booking>> = await api.post(
-    "/api/bookings",
-    payload
+export const updateListing = async (
+  id: string,
+  formData: FormData
+): Promise<Listing> => {
+  const { data } = await api.patch<{ data: Listing }>(
+    `/api/listings/${id}`,
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    }
   );
-  return res.data.data;
+  return data.data;
 };
 
-export const getBookingById = async (bookingId: string): Promise<Booking> => {
-  const res = await api.get<Booking>(`/api/bookings/${bookingId}`);
-  return res.data;
-};
-
-// --------------------------------------
-// ⭐ Reviews
-// --------------------------------------
+// Reviews API
 export const createReview = async (
   listingId: string,
   payload: { rating: number; comment?: string }
@@ -244,22 +241,18 @@ export const createReview = async (
   return res.data.data;
 };
 
-// --------------------------------------
-// 💳 Payments
-// --------------------------------------
-export async function initiatePayment(
+// Payments API
+export const initiatePayment = async (
   payload: InitiatePaymentPayload
-): Promise<PaymentResponse> {
+): Promise<PaymentResponse> => {
   const { data } = await api.post<PaymentResponse>(
     "/api/payments/initiate",
     payload
   );
   return data;
-}
+};
 
-// --------------------------------------
-// 👤 User Profile / Status
-// --------------------------------------
+// User Profile / Status
 export const getUserProfile = async (userId: string): Promise<User> => {
   const res: AxiosResponse<ApiResponse<User>> = await api.get(
     `/api/users/${userId}`
@@ -276,16 +269,16 @@ export const getUserOnlineStatus = async (
   return res.data.data;
 };
 
-// --------------------------------------
-// 🤖 AI Endpoints
-// --------------------------------------
+// AI Endpoints
 export const askUgandaRentalExpert = async (
   payload: AskExpertPayload
 ): Promise<AskExpertResponse> => {
   const res: AxiosResponse<AskExpertResponse> = await api.post(
     "/api/ai/ask-expert",
     payload,
-    { silenceToast: true } as CustomAxiosRequestConfig
+    {
+      silenceToast: true,
+    } as CustomAxiosRequestConfig
   );
   return res.data;
 };
