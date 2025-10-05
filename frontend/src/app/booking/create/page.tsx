@@ -110,8 +110,7 @@ const CreateBookingPage = () => {
     }
   };
 
-  if (isLoading)
-    return <LoadingScreen message="Loading listing details..." />;
+  if (isLoading) return <LoadingScreen message="Loading listing details..." />;
 
   if (listingError || !listing)
     return (
@@ -263,3 +262,5 @@ const CreateBookingPage = () => {
 };
 
 export default CreateBookingPage;
+
+export const dynamic = "force-dynamic";
