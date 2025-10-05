@@ -200,5 +200,3 @@ const Register = () => {
 };
 
 export default Register;
-
-export const dynamic = "force-dynamic";

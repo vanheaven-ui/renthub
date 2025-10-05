@@ -1,100 +1,47 @@
-"use client";
-
-import {
-  useState,
-  useEffect,
-  useContext,
-  createContext,
-  ReactNode,
-} from "react";
-import { useRouter } from "next/navigation";
-import { User } from "@/types";
-import { getMe, loginUser, registerUser, logoutUser } from "@/lib/api";
-import { RegisterPayload } from "@/types"; // Import the type from your types file
+// frontend/hooks/useAuth.ts
+'use client';
+import { useState, useEffect, useContext, createContext, ReactNode } from 'react';
+import { User } from '@/types';
 
 interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: RegisterPayload) => Promise<void>; // Updated type
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+    user: User | null;
+    login: (userData: User) => void;
+    logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+    const [user, setUser] = useState<User | null>(null);
 
-  // Load user from localStorage when client mounts
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) setUser(JSON.parse(storedUser));
-    setLoading(false);
-  }, []);
+    useEffect(() => {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            setUser(JSON.parse(storedUser));
+        }
+    }, []);
 
-  // Refresh session (checks with backend)
-  const refreshUser = async () => {
-    try {
-      const me = await getMe();
-      setUser(me);
-      localStorage.setItem("user", JSON.stringify(me));
-    } catch {
-      setUser(null);
-      localStorage.removeItem("user");
-    }
-  };
+    const login = (userData: User) => {
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+    };
 
-  // Login
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      const { user } = await loginUser({ email, password });
-      setUser(user);
-      localStorage.setItem("user", JSON.stringify(user));
-      router.push("/dashboard");
-    } finally {
-      setLoading(false);
-    }
-  };
+    const logout = () => {
+        localStorage.removeItem('user');
+        setUser(null);
+    };
 
-  // Register
-  const register = async (data: RegisterPayload) => {
-    setLoading(true);
-    try {
-      const { user } = await registerUser(data);
-      setUser(user);
-      localStorage.setItem("user", JSON.stringify(user));
-      router.push("/dashboard");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Logout
-  const logout = async () => {
-    await logoutUser();
-    localStorage.removeItem("user");
-    setUser(null);
-    router.push("/login");
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{ user, loading, login, register, logout, refreshUser }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+    return (
+        <AuthContext.Provider value={{ user, login, logout }}>
+            {children}
+        </AuthContext.Provider>
+    );
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 };

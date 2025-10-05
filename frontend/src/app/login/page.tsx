@@ -36,8 +36,6 @@ const Login = () => {
         password: values.password,
       });
 
-      // Optional: show toast with message
-      console.log(message); // replace with toast notification
 
       // Step 2: Fetch authenticated user(update local storage)
       const user = await getMe();
@@ -133,7 +131,7 @@ const Login = () => {
           </Form>
         </Formik>
         <p className="mt-4 text-center text-gray-600">
-          Don&apos;t have an account? {/* Corrected unescaped apostrophe */}
+          Don&apos;t have an account? 
           <span
             onClick={() => router.push("/register")}
             className="text-purple-600 font-semibold cursor-pointer hover:underline ml-1"
