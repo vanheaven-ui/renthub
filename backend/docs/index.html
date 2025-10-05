@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="description"
+      content="RentHub API Documentation — Access endpoints for listings, bookings, payments, reviews, users, and more."
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RentHub API Docs</title>
+    <link
+      rel="icon"
+      href="https://renthub-delta.vercel.app/favicon.ico"
+      type="image/x-icon"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        --color-purple: #7e22ce;
+        --color-pink: #ec4899;
+        --color-blue: #3b82f6;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", sans-serif;
+        background: linear-gradient(to bottom right, #faf5ff, #fdf2f8, #eff6ff);
+        color: #1f2937;
+        overflow-x: hidden;
+      }
+
+      header {
+        position: relative;
+        z-index: 10;
+        background: linear-gradient(
+          to right,
+          var(--color-purple),
+          var(--color-pink),
+          var(--color-blue)
+        );
+        color: white;
+        padding: 1.2rem 2rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      header h1 {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+      }
+
+      header a {
+        color: white;
+        text-decoration: none;
+        font-weight: 500;
+        background: rgba(255, 255, 255, 0.15);
+        padding: 0.5rem 1.2rem;
+        border-radius: 9999px;
+        transition: all 0.3s ease;
+      }
+
+      header a:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+
+      .hero {
+        text-align: center;
+        padding: 4rem 1rem 3rem;
+        position: relative;
+        z-index: 5;
+      }
+
+      .hero h2 {
+        font-size: 2.8rem;
+        font-weight: 800;
+        color: var(--color-purple);
+        background: linear-gradient(
+          to right,
+          var(--color-purple),
+          var(--color-pink),
+          var(--color-blue)
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.8rem;
+      }
+
+      .hero p {
+        color: #4b5563;
+        font-size: 1.1rem;
+        font-weight: 500;
+      }
+
+      .doc-container {
+        border-radius: 1.5rem;
+        overflow: hidden;
+        margin: 2rem auto;
+        width: 90%;
+        max-width: 1400px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        background: white;
+      }
+
+      footer {
+        text-align: center;
+        color: #6b7280;
+        padding: 2rem;
+        font-size: 0.9rem;
+      }
+
+      .bg-blobs {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        z-index: 0;
+      }
+
+      .blob {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(90px);
+        opacity: 0.3;
+      }
+
+      .blob.pink {
+        background-color: var(--color-pink);
+        top: -10%;
+        left: -10%;
+        width: 350px;
+        height: 350px;
+      }
+
+      .blob.blue {
+        background-color: var(--color-blue);
+        bottom: -10%;
+        right: -10%;
+        width: 400px;
+        height: 400px;
+      }
+
+      .blob.purple {
+        background-color: var(--color-purple);
+        bottom: 20%;
+        left: 20%;
+        width: 300px;
+        height: 300px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-blobs">
+      <div class="blob pink"></div>
+      <div class="blob purple"></div>
+      <div class="blob blue"></div>
+    </div>
+
+    <header>
+      <h1>RentHub API</h1>
+      <a href="https://renthub-delta.vercel.app" target="_blank">Go to App ↗</a>
+    </header>
+
+    <section class="hero">
+      <h2>RentHub REST API Documentation</h2>
+      <p>
+        Explore endpoints for listings, authentication, bookings, payments, and
+        reviews.
+      </p>
+    </section>
+
+    <div class="doc-container">
+      <redoc spec-url="openapi.yaml"></redoc>
+    </div>
+
+    <footer>
+      © <span id="year"></span> RentHub | Built by Ezekiel Mworekwa
+    </footer>
+
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+    </script>
+    <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  </body>
+</html>

@@ -1,0 +1,201 @@
+openapi: 3.0.0
+info:
+  title: RentHub API
+  version: 1.0.0
+  description: |
+    The **RentHub API** powers listings, bookings, reviews, and user management for the RentHub platform.
+    It uses JWT authentication and supports both renters and owners.
+
+servers:
+  - url: https://renthub-1-9tnm.onrender.com/api
+    description: Production (Render)
+  - url: http://localhost:5000/api
+    description: Local Development
+
+tags:
+  - name: Auth
+    description: Authentication and user registration endpoints
+  - name: Listings
+    description: Create, view, and manage property listings
+  - name: Bookings
+    description: Manage property bookings
+  - name: Payments
+    description: Payment processing and verification
+  - name: Reviews
+    description: Ratings and feedback for listings
+  - name: Users
+    description: User management and profile updates
+  - name: Admin
+    description: Admin-only routes for moderation and analytics
+  - name: AI
+    description: AI-assisted recommendations and insights
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+                role:
+                  type: string
+                  enum: [RENTER, OWNER]
+      responses:
+        '201':
+          description: User successfully registered
+        '400':
+          description: Validation or registration error
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in a user and return a token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Returns user info and JWT
+        '401':
+          description: Invalid credentials
+
+  /listings:
+    get:
+      tags: [Listings]
+      summary: Retrieve all available listings
+      responses:
+        '200':
+          description: List of all listings
+    post:
+      tags: [Listings]
+      summary: Create a new listing
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                pricePerDay: { type: number }
+                location: { type: string }
+                images:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201':
+          description: Listing created successfully
+        '401':
+          description: Unauthorized
+
+  /listings/{id}:
+    get:
+      tags: [Listings]
+      summary: Get listing details by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Listing found }
+        '404': { description: Listing not found }
+
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: Get all bookings for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Returns bookings list }
+    post:
+      tags: [Bookings]
+      summary: Create a new booking
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                listingId: { type: string }
+                startDate: { type: string, format: date }
+                endDate: { type: string, format: date }
+      responses:
+        '201': { description: Booking created }
+
+  /payments/initialize:
+    post:
+      tags: [Payments]
+      summary: Initialize a new payment session
+      responses:
+        '200': { description: Payment link returned }
+
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Add a new review for a listing
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                listingId: { type: string }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+      responses:
+        '201': { description: Review added }
+
+  /ai/recommendations:
+    get:
+      tags: [AI]
+      summary: Get AI-powered recommendations for listings
+      responses:
+        '200': { description: Returns recommended listings }
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the current logged-in user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Returns user info }
+        '401': { description: Unauthorized }
+
+  /admin/overview:
+    get:
+      tags: [Admin]
+      summary: Get platform analytics (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: Returns summary analytics }
+        '403': { description: Forbidden }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
