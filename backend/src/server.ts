@@ -43,6 +43,17 @@ app.use("/api/bookings", messageRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/ai", aiRoutes);
 
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    message: "RentHub API is live and running!",
+    environment: process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+    uptime: `${process.uptime().toFixed(2)} seconds`,
+    documentation: "https://renthub-api-docs.vercel.app", 
+  });
+});
+
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
