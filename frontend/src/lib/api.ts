@@ -1,3 +1,4 @@
+// frontend/lib/api.ts
 import axios, { AxiosResponse, AxiosError, AxiosRequestConfig } from "axios";
 import { io as ClientIO, Socket } from "socket.io-client";
 import { toast } from "react-hot-toast";
@@ -195,6 +196,13 @@ export const getUnreadMessagesBatch = async (
 // ----------------- Listings -----------------
 export const getListings = async (): Promise<Listing[]> => {
   const res = await api.get<Listing[]>("/api/listings");
+  return res.data;
+};
+
+export const getMyListings = async (): Promise<Listing[]> => {
+  const res: AxiosResponse<Listing[]> = await api.get(
+    "/api/listings/my-listings"
+  );
   return res.data;
 };
 
