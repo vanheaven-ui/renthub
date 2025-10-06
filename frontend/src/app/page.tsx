@@ -7,7 +7,6 @@ import { Listing } from "@/types";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./context/AuthProvider";
 import Link from "next/link";
-import Image from "next/image"; 
 import {
   CurrencyDollarIcon,
   CalendarDaysIcon,
@@ -20,9 +19,11 @@ import {
   BuildingOfficeIcon,
   PlusIcon,
 } from "@heroicons/react/24/outline";
+
 import FilterPanel, { FilterOptions } from "@/components/FilterPanel";
 import LoadingScreen from "@/components/LoadingScreen";
 import ErrorScreen from "@/components/ErrorScreen";
+import ImageWithLoader from "@/components/ImageWithLoader"; 
 
 // --- CATEGORY ICONS ---
 const categories = ["Apartment", "House", "Villa", "Cabin"];
@@ -71,7 +72,6 @@ const HomePage = () => {
   const totalEarnings = myListings.reduce((sum, listing) => {
     const confirmedBookings =
       listing.bookings?.filter((b) => b.status === "CONFIRMED") || [];
-
     return (
       sum +
       confirmedBookings.reduce(
@@ -92,7 +92,6 @@ const HomePage = () => {
           bookingDate.getFullYear() === now.getFullYear()
         );
       }).length || 0;
-
     return sum + monthlyBookings;
   }, 0);
 
@@ -155,7 +154,6 @@ const HomePage = () => {
       );
     }
 
-    // RENTER / GUEST HERO
     return (
       <div className="container mx-auto px-6 py-24 text-center relative z-10">
         <h1 className="text-5xl font-extrabold text-purple-900 mb-4 tracking-tight leading-snug">
@@ -276,18 +274,13 @@ const HomePage = () => {
                       onMouseLeave={() => setHoveredListing(null)}
                     >
                       <div className="relative h-64 overflow-hidden bg-gray-100 flex items-center justify-center">
-                        {currentImageUrl ? (
-                          <Image // Replaced <img> with <Image />
-                            src={currentImageUrl}
-                            alt={listing.title}
-                            fill // Use fill to take up the parent div's space
-                            className="object-cover transition-transform duration-500 group-hover:scale-110" // object-cover for fit and transition for hover effect
-                          />
-                        ) : (
-                          <span className="text-gray-500 font-semibold text-lg text-center p-4">
-                            Image not available
-                          </span>
-                        )}
+                        <ImageWithLoader
+                          src={currentImageUrl}
+                          alt={listing.title}
+                          fill
+                          className="object-cover transition-transform duration-500 group-hover:scale-110"
+                          containerClassName="relative h-64 w-full"
+                        />
                         <span className="absolute top-3 left-3 bg-gradient-to-r from-blue-400 to-green-400 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
                           M-Money Pay
                         </span>

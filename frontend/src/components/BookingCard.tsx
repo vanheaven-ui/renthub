@@ -6,9 +6,10 @@ import {
   ChatBubbleBottomCenterTextIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/solid";
-import Image from "next/image";
 import { useAuth } from "@/app/context/AuthProvider";
 import { Booking, BookingStatus as BookingStatusEnum } from "@/types";
+import ImageWithLoader from "./ImageWithLoader";
+import { formatNumber } from "@/lib/formatNumbers";
 
 interface BookingCardProps {
   booking: Booking;
@@ -61,32 +62,26 @@ const BookingCard = ({
         {/* Listing Image */}
         <div className="relative w-full h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white mb-4">
           {booking.listing?.images?.[0] ? (
-            <Image
+            <ImageWithLoader
               src={`/${booking.listing.images[0]}`}
               alt={booking.listing?.title ?? "Listing image"}
               fill
               className="object-cover"
+              containerClassName="rounded-2xl"
+              loaderType="spinner"
             />
           ) : (
-            <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="w-12 h-12 text-gray-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 7h18M3 12h18M3 17h18"
-                />
-              </svg>
-            </div>
+            <ImageWithLoader
+              src="/invalid-path.png"
+              alt="Listing fallback image"
+              fill
+              className="object-cover"
+              containerClassName="rounded-2xl"
+            />
           )}
         </div>
 
+        {/* Title & Status */}
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-xl font-bold text-gray-900 leading-tight">
             {booking.listing?.title}
@@ -100,7 +95,9 @@ const BookingCard = ({
           </span>
         </div>
 
+        {/* Booking Info */}
         <div className="text-sm text-gray-600 space-y-2 flex-grow">
+          {/* Renter / Owner */}
           <div className="flex items-center">
             <UserCircleIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
@@ -109,18 +106,28 @@ const BookingCard = ({
                 : `Renter: ${booking.renter?.name}`}
             </span>
           </div>
+
+          {/* Booking Dates */}
           <div className="flex items-center">
             <CalendarDaysIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
               {formatDate(booking.startDate)} - {formatDate(booking.endDate)}
             </span>
           </div>
-          <div className="flex items-center font-bold text-gray-800">
-            <CurrencyDollarIcon className="w-5 h-5 text-green-600 mr-2" />
-            <span>Total: ${booking.totalPrice}</span>
+
+          {/* Total Amount */}
+          <div className="flex items-center justify-between mt-2 p-3 bg-purple-50 rounded-xl shadow-inner border border-purple-100">
+            <span className="text-gray-700 font-semibold text-sm">
+              Total Amount
+            </span>
+            <span className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-3 py-1 rounded-full font-bold flex items-center gap-1">
+              <span className="text-xs font-semibold">UGX</span>
+              <span>{formatNumber(booking.totalPrice)}</span>
+            </span>
           </div>
         </div>
 
+        {/* Action Buttons */}
         <div className="mt-6 flex flex-col space-y-4">
           {showPaymentButton && (
             <button

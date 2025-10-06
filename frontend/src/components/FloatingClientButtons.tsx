@@ -13,8 +13,7 @@ import {
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import { useState, useEffect } from "react";
-// 🎯 Import the new, repositioned AI component
-import HubScoutWidget from "./HubScoutWidget"; 
+import HubScoutWidget from "./HubScoutWidget";
 
 const FloatingClientButtons = () => {
   const { user } = useAuth();
@@ -56,10 +55,8 @@ const FloatingClientButtons = () => {
 
   return (
     <>
-      {/* 🎯 1. AI Hub Scout - Placed bottom-LEFT (new position) */}
       <HubScoutWidget />
 
-      {/* 2. Main floating shortcut menu container - Placed top-RIGHT (original position) */}
       <div
         className="fixed top-6 right-6 z-50 w-14 h-14"
         onMouseEnter={handleMouseEnter}

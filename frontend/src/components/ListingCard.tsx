@@ -10,6 +10,7 @@ import {
   CurrencyDollarIcon,
   PencilSquareIcon,
 } from "@heroicons/react/24/outline";
+import { formatNumber } from "@/lib/formatNumbers";
 
 interface ListingCardProps {
   listing: Listing;
@@ -74,7 +75,10 @@ const ListingCard = ({ listing }: ListingCardProps) => {
         </h3>
         <p className="text-gray-700 line-clamp-2">{listing.description}</p>
         <p className="text-gray-900 font-semibold mt-2">
-          Ugx {listing.pricePerDay} / night
+          <span className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-1 rounded-full font-bold flex items-center gap-2">
+            <span className="text-xs font-semibold">UGX</span>
+            <span>{formatNumber(listing.pricePerDay)} / night</span>
+          </span>
         </p>
         <p className="text-gray-500 text-sm mt-1">{listing.location}</p>
 

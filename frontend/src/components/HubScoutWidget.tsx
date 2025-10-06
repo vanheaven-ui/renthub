@@ -25,7 +25,9 @@ const HubScoutWidget = () => {
 
   useEffect(() => setMounted(true), []);
 
-  const handleToggle = () => setIsOpen(!isOpen);
+  const handleToggle = () => {
+    setIsOpen(!isOpen);
+  };
 
   return (
     <>
@@ -214,7 +216,10 @@ const DraggableChatWindow: React.FC<ChatWindowProps> = ({ onClose }) => {
     >
       {/* Header - ONLY draggable area */}
       <div
-        onPointerDown={draggableChat.onPointerDown}
+        onPointerDown={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
+          draggableChat.onPointerDown(e);
+        }}
         className="flex items-center justify-between p-3 bg-gray-800/80 text-white border-b border-purple-500/30 cursor-grab active:cursor-grabbing select-none"
       >
         <div className="flex items-center space-x-2">

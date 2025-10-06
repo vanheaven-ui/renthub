@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getBookingById, initiatePayment } from "@/lib/api";
 import { Booking, InitiatePaymentPayload, PaymentResponse } from "@/types";
@@ -14,13 +14,15 @@ import {
   CreditCardIcon,
   ArrowPathIcon,
   HomeIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/solid";
-import Image from "next/image";
-import { PaymentSchema } from "@/validation/payment";
 import toast from "react-hot-toast";
 import LoadingScreen from "@/components/LoadingScreen";
+import ImageWithLoader from "@/components/ImageWithLoader";
+import { PaymentSchema } from "@/validation/payment";
+import { formatNumber } from "@/lib/formatNumbers";
 
-// 💰 Simple UGX Badge
+// Simple UGX Badge
 const UgxIcon = ({ className }: { className?: string }) => (
   <span
     className={`inline-flex items-center justify-center rounded bg-purple-600 text-white px-1.5 py-0.5 text-[10px] font-bold leading-none ${className}`}
@@ -31,11 +33,17 @@ const UgxIcon = ({ className }: { className?: string }) => (
 
 const CheckoutPage = () => {
   const { user } = useAuth();
-  const [isProcessing, setIsProcessing] = useState(false);
-
+  const router = useRouter();
   const { id } = useParams();
   const bookingId = Array.isArray(id) ? id[0] : id;
+  const [isProcessing, setIsProcessing] = useState(false);
 
+  const summaryRef = useRef<HTMLDivElement>(null);
+  const [summaryHeight, setSummaryHeight] = useState<number | undefined>(
+    undefined
+  );
+
+  // Fetch booking details
   const {
     data: booking,
     isLoading,
@@ -43,30 +51,51 @@ const CheckoutPage = () => {
   } = useQuery<Booking>({
     queryKey: ["booking", bookingId],
     queryFn: () => {
-      if (typeof bookingId === "string") return getBookingById(bookingId);
-      throw new Error("Invalid booking ID");
+      if (!bookingId) throw new Error("Invalid booking ID");
+      return getBookingById(bookingId);
     },
-    enabled: !!bookingId && typeof bookingId === "string",
+    enabled: !!bookingId,
   });
+
+  useEffect(() => {
+    if (summaryRef.current) {
+      setSummaryHeight(summaryRef.current.offsetHeight);
+    }
+  }, [booking, isLoading]);
+
+  // Memoized booking info
+  const formattedStartDate = useMemo(() => {
+    return booking
+      ? new Date(booking.startDate).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "";
+  }, [booking]);
+
+  const formattedEndDate = useMemo(() => {
+    return booking
+      ? new Date(booking.endDate).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "";
+  }, [booking]);
 
   const handleSubmit = async (values: {
     full_name: string;
     email: string;
     phone_number: string;
   }) => {
-    if (!user) {
-      toast.error("You must be logged in to make a payment.");
-      return;
-    }
-    if (!booking) {
-      toast.error("Booking not found. Please try again.");
-      return;
-    }
+    if (!user) return toast.error("You must be logged in to make a payment.");
+    if (!booking) return toast.error("Booking not found. Please try again.");
 
     setIsProcessing(true);
 
     try {
-      const paymentPayload: InitiatePaymentPayload = {
+      const payload: InitiatePaymentPayload = {
         bookingId: booking.id,
         amount: booking.totalPrice,
         currency: "UGX",
@@ -75,32 +104,29 @@ const CheckoutPage = () => {
         phone_number: values.phone_number,
       };
 
-      const paymentResponse: PaymentResponse = await initiatePayment(
-        paymentPayload
-      );
+      const response: PaymentResponse = await initiatePayment(payload);
 
-      toast.success(paymentResponse.message);
+      toast.success(response.message);
 
-      if (paymentResponse.data?.link) {
-        window.location.href = paymentResponse.data.link;
+      if (response.data?.link) {
+        window.location.href = response.data.link;
       } else {
         toast.error("Payment link not found.");
-        throw new Error("Payment link not found in response.");
       }
     } catch (err) {
-      if (err instanceof Error) {
-        console.error("Payment initiation error:", err.message);
-      } else {
-        console.error("Payment initiation error:", err);
-      }
+      console.error("Payment initiation error:", err);
+      toast.error("Failed to initiate payment. Try again later.");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  if (isLoading)
-    return <LoadingScreen message="Loading booking details..." />;
+  const handleCancel = () => {
+    toast("Payment cancelled.");
+    router.back();
+  };
 
+  if (isLoading) return <LoadingScreen message="Loading booking details..." />;
   if (bookingError || !booking || !booking.listing)
     return (
       <div className="flex items-center justify-center min-h-screen text-red-500">
@@ -111,71 +137,74 @@ const CheckoutPage = () => {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 py-10 overflow-hidden">
       {/* Background blobs */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
-      <div className="absolute top-1/2 left-1/4 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 pointer-events-none"></div>
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none" />
+      <div className="absolute top-1/2 left-1/4 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 pointer-events-none" />
 
-      <div className="relative container mx-auto max-w-5xl z-10 px-4 sm:px-6 lg:px-8">
-        <div className="bg-white/50 backdrop-blur-md shadow-2xl rounded-3xl p-6 md:p-10 flex flex-col lg:flex-row items-center justify-center space-y-8 lg:space-y-0 lg:space-x-12">
+      <div className="relative container mx-auto max-w-6xl z-10 px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col lg:flex-row items-start gap-8">
           {/* Booking Summary */}
-          <div className="flex-1 w-full lg:w-1/2 p-6 bg-gray-50/70 backdrop-blur rounded-2xl shadow-inner border border-gray-100">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4 border-b border-gray-200 pb-2 flex items-center gap-2">
-              <HomeIcon className="w-6 h-6 text-purple-600" />
-              Booking Summary
+          <div
+            ref={summaryRef}
+            className="flex-1 w-full lg:w-1/2 flex flex-col bg-white/60 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-white/30"
+          >
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 border-b border-white/30 pb-2 flex items-center gap-2">
+              <HomeIcon className="w-6 h-6 text-purple-600" /> Booking Summary
             </h2>
 
-            <div className="relative w-full h-48 rounded-lg overflow-hidden mb-4 shadow-md">
-              <Image
+            <div
+              className="relative w-full rounded-2xl overflow-hidden shadow-lg mb-6 flex-shrink-0"
+              style={{
+                height: summaryHeight ? `${summaryHeight / 2}px` : "256px",
+              }}
+            >
+              <ImageWithLoader
                 src={
                   booking.listing.images[0]
                     ? `/${booking.listing.images[0]}`
-                    : "https://via.placeholder.com/800"
+                    : "/invalid-path.png"
                 }
                 alt={booking.listing.title}
                 fill
                 className="object-cover"
-                priority
+                containerClassName="rounded-2xl"
+                loaderType="spinner"
               />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/20 rounded-2xl pointer-events-none" />
             </div>
 
-            <p className="text-xl font-semibold text-gray-900 mb-2">
-              {booking.listing.title}
-            </p>
-            <p className="text-sm text-gray-600 mb-4">
-              {booking.listing.location}
-            </p>
+            <div className="text-gray-900">
+              <p className="text-xl font-semibold mb-1 text-purple-800">
+                {booking.listing.title}
+              </p>
+              <p className="text-sm text-gray-700/90 mb-4">
+                {booking.listing.location}
+              </p>
 
-            <div className="flex justify-between items-center text-lg font-medium mb-2">
-              <span className="flex items-center gap-2 text-gray-700">
-                <span>Total Price:</span>
-              </span>
-              <span className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-1 rounded-full font-bold flex items-center gap-2">
-                <UgxIcon />
-                <span>{booking.totalPrice}</span>
-              </span>
+              <div className="flex justify-between items-center text-lg font-medium mb-2">
+                <span className="flex items-center gap-2 text-gray-700/90">
+                  <span>Total Price:</span>
+                </span>
+                <span className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-1 rounded-full font-bold flex items-center gap-2">
+                  <UgxIcon /> <span>{formatNumber(booking.totalPrice)}</span>
+                </span>
+              </div>
+
+              <p className="text-gray-700 text-sm">
+                <span className="font-semibold">From:</span>{" "}
+                {formattedStartDate}
+              </p>
+              <p className="text-gray-700 text-sm mb-2">
+                <span className="font-semibold">To:</span> {formattedEndDate}
+              </p>
             </div>
-
-            {/* Booking Dates */}
-            <p className="text-gray-700 text-sm">
-              <span className="font-semibold">From:</span>{" "}
-              {new Date(booking.startDate).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-            <p className="text-gray-700 text-sm mb-2">
-              <span className="font-semibold">To:</span>{" "}
-              {new Date(booking.endDate).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
           </div>
 
           {/* Payment Form */}
-          <div className="flex-1 w-full lg:w-1/2">
+          <div
+            className="flex-1 w-full lg:w-1/2 flex flex-col bg-white/60 backdrop-blur-md rounded-3xl p-6 shadow-xl border border-white/30"
+            style={{ minHeight: summaryHeight }}
+          >
             <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-purple-900 mb-6 drop-shadow-sm">
               Complete Your Payment
             </h1>
@@ -190,103 +219,83 @@ const CheckoutPage = () => {
               onSubmit={handleSubmit}
             >
               {() => (
-                <Form className="space-y-6">
-                  {/* Full Name */}
-                  <div>
-                    <label
-                      htmlFor="full_name"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Full Name
-                    </label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <UserIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Field
-                        type="text"
-                        name="full_name"
-                        id="full_name"
-                        className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-purple-500 focus:border-purple-500 transition-all"
-                      />
-                    </div>
-                    <ErrorMessage
-                      name="full_name"
-                      component="div"
-                      className="text-red-500 text-sm mt-1"
-                    />
+                <Form className="space-y-6 flex flex-col justify-between h-full">
+                  <div className="space-y-6">
+                    {["full_name", "email", "phone_number"].map((field) => {
+                      const Icon =
+                        field === "full_name"
+                          ? UserIcon
+                          : field === "email"
+                          ? EnvelopeIcon
+                          : PhoneIcon;
+                      const placeholder =
+                        field === "phone_number"
+                          ? "077..."
+                          : field === "email"
+                          ? "you@example.com"
+                          : "Full Name";
+
+                      return (
+                        <div key={field}>
+                          <label
+                            htmlFor={field}
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            {field
+                              .split("_")
+                              .map((w) => w[0].toUpperCase() + w.slice(1))
+                              .join(" ")}
+                          </label>
+                          <div className="mt-1 relative rounded-md shadow-sm">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <Icon className="h-5 w-5 text-gray-400" />
+                            </div>
+                            <Field
+                              type={field === "email" ? "email" : "text"}
+                              name={field}
+                              id={field}
+                              placeholder={placeholder}
+                              className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-purple-500 focus:border-purple-500 transition-all"
+                            />
+                          </div>
+                          <ErrorMessage
+                            name={field}
+                            component="div"
+                            className="text-red-500 text-sm mt-1"
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {/* Email */}
-                  <div>
-                    <label
-                      htmlFor="email"
-                      className="block text-sm font-medium text-gray-700"
+                  <div className="flex gap-4 mt-6">
+                    <button
+                      type="submit"
+                      className="flex-1 flex justify-center items-center py-4 px-4 border border-transparent rounded-full shadow-lg text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-300 transform hover:scale-105"
+                      disabled={isProcessing}
                     >
-                      Email Address
-                    </label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <EnvelopeIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Field
-                        type="email"
-                        name="email"
-                        id="email"
-                        className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-purple-500 focus:border-purple-500 transition-all"
-                      />
-                    </div>
-                    <ErrorMessage
-                      name="email"
-                      component="div"
-                      className="text-red-500 text-sm mt-1"
-                    />
-                  </div>
+                      {isProcessing ? (
+                        <>
+                          <ArrowPathIcon className="h-5 w-5 mr-3 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCardIcon className="h-5 w-5 mr-3" />
+                          Pay with Mobile Money
+                        </>
+                      )}
+                    </button>
 
-                  {/* Phone Number */}
-                  <div>
-                    <label
-                      htmlFor="phone_number"
-                      className="block text-sm font-medium text-gray-700"
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      className="flex-1 flex justify-center items-center py-4 px-4 border border-gray-300 rounded-full shadow-lg text-lg font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all duration-300"
                     >
-                      Phone Number (e.g., 077...)
-                    </label>
-                    <div className="mt-1 relative rounded-md shadow-sm">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <PhoneIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <Field
-                        type="tel"
-                        name="phone_number"
-                        id="phone_number"
-                        className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-purple-500 focus:border-purple-500 transition-all"
-                      />
-                    </div>
-                    <ErrorMessage
-                      name="phone_number"
-                      component="div"
-                      className="text-red-500 text-sm mt-1"
-                    />
+                      <XMarkIcon className="h-5 w-5 mr-3" />
+                      Cancel
+                    </button>
                   </div>
-
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    className="w-full flex justify-center items-center py-4 px-4 border border-transparent rounded-full shadow-lg text-lg font-bold text-white bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-300 transform hover:scale-105"
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <ArrowPathIcon className="h-5 w-5 mr-3 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCardIcon className="h-5 w-5 mr-3" />
-                        Pay with Mobile Money
-                      </>
-                    )}
-                  </button>
                 </Form>
               )}
             </Formik>

@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getListingById, createReview } from "@/lib/api";
 import { Listing } from "@/types";
-import Image from "next/image";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/context/AuthProvider";
@@ -12,14 +11,24 @@ import Link from "next/link";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import LoadingScreen from "@/components/LoadingScreen";
+import ImageWithLoader from "@/components/ImageWithLoader";
 import { ReviewSchema } from "@/validation/review";
+import { formatNumber } from "@/lib/formatNumbers";
+
+// 💰 Styled UGX Badge
+const UgxBadge = ({ className }: { className?: string }) => (
+  <span
+    className={`inline-flex items-center justify-center rounded bg-purple-600 text-white px-1.5 py-0.5 text-[10px] font-bold leading-none ${className}`}
+  >
+    UGX
+  </span>
+);
 
 const ListingPage = ({ params }: { params: { id: string } }) => {
   const { id } = params;
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [imageLoading, setImageLoading] = useState(true);
 
   const bookingEndDateString = searchParams.get("endDate");
 
@@ -35,24 +44,18 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
   const mutation = useMutation({
     mutationFn: (values: { rating: number; comment?: string }) =>
       createReview(id, values),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["listing", id] });
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["listing", id] }),
   });
 
-  if (isLoading) {
-    return <LoadingScreen message="Loading listing details..." />;
-  }
-
-  if (error || !listing) {
+  if (isLoading) return <LoadingScreen message="Loading listing details..." />;
+  if (error || !listing)
     return (
       <div className="flex items-center justify-center h-screen text-red-500">
         Error: Listing not found.
       </div>
     );
-  }
 
-  // Show review form only if renter and booking ends today
   const isRenter = user?.role === "RENTER";
   let showReviewForm = false;
   if (isRenter && bookingEndDateString) {
@@ -62,36 +65,26 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
     const endDate = new Date(bookingEndDateString);
     endDate.setHours(0, 0, 0, 0);
 
-    if (today.getTime() === endDate.getTime()) {
-      showReviewForm = true;
-    }
+    if (today.getTime() === endDate.getTime()) showReviewForm = true;
   }
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 py-10 overflow-hidden">
       {/* Background shapes */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none"></div>
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"></div>
+      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none" />
 
       <div className="relative container mx-auto max-w-5xl z-10 px-4 sm:px-6 lg:px-8">
         <div className="bg-white/50 backdrop-blur-md shadow-2xl rounded-3xl overflow-hidden p-6 md:p-10">
           {/* Image & Info */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
             <div className="relative h-64 md:h-full w-full rounded-2xl overflow-hidden shadow-lg">
-              {imageLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 animate-pulse">
-                  <div className="w-16 h-16 border-4 border-purple-500 border-dotted rounded-full animate-spin"></div>
-                </div>
-              )}
-              <Image
-                src={listing.images[0] || "https://via.placeholder.com/1000"}
+              <ImageWithLoader
+                src={listing.images[0] || ""}
                 alt={listing.title}
                 fill
-                priority
-                className={`object-cover transition-opacity duration-500 transform ${
-                  imageLoading ? "opacity-0" : "opacity-100 hover:scale-[1.02]"
-                }`}
-                onLoadingComplete={() => setImageLoading(false)}
+                className="object-cover transition-transform duration-500 transform hover:scale-[1.02]"
+                containerClassName="relative h-64 md:h-full w-full"
               />
             </div>
 
@@ -100,9 +93,10 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                 <h1 className="text-4xl sm:text-5xl font-extrabold text-purple-900 mb-2 drop-shadow-sm leading-tight">
                   {listing.title}
                 </h1>
-                <p className="text-3xl font-bold text-pink-600 mb-4">
-                  Ugx {listing.pricePerDay} / night
-                </p>
+                <div className="flex items-center gap-2 text-3xl font-bold text-pink-600 mb-4">
+                  <UgxBadge />
+                  <span>{formatNumber(listing.pricePerDay)} / night</span>
+                </div>
                 <div className="flex items-center text-gray-600 mb-6">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -158,7 +152,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
               </h2>
               <div className="p-6 bg-gray-50 rounded-2xl shadow-inner flex items-center gap-4">
                 {listing.owner?.profilePicture ? (
-                  <Image
+                  <ImageWithLoader
                     src={listing.owner.profilePicture}
                     alt={listing.owner.name || "Owner"}
                     width={80}
@@ -192,11 +186,8 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                       className="p-4 bg-gray-50 rounded-2xl shadow-sm"
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <Image
-                          src={
-                            review.author?.profilePicture ||
-                            "https://via.placeholder.com/40"
-                          }
+                        <ImageWithLoader
+                          src={review.author?.profilePicture || ""}
                           alt={review.author?.name || "User"}
                           width={40}
                           height={40}
@@ -222,8 +213,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                       </div>
                       {review.comment && (
                         <p className="text-gray-600 text-sm italic">
-                          &apos;{review.comment}&apos;{" "}
-                          {/* FIX: Escaped single quotes to resolve lint error (react/no-unescaped-entities) */}
+                          &apos;{review.comment}&apos;
                         </p>
                       )}
                     </div>
@@ -284,7 +274,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
                         </div>
                         <button
                           type="submit"
-                          disabled={isSubmitting || mutation.isPending} 
+                          disabled={isSubmitting || mutation.isPending}
                           className="w-full bg-purple-600 text-white font-semibold py-3 rounded-xl hover:bg-purple-700 transition-all duration-300 transform hover:scale-[1.01]"
                         >
                           {mutation.isPending

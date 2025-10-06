@@ -33,6 +33,7 @@ import { CheckIcon as CheckIconSolid } from "@heroicons/react/20/solid";
 import socket from "@/lib/socket";
 import { useAuth } from "@/app/context/AuthProvider";
 import Image from "next/image";
+import DefaultProfileIcon from "@/components/DefaultProfileIcon"; // <- SVG Component
 
 interface BookingChatProps {
   bookingId: string;
@@ -58,7 +59,6 @@ const BookingChat = ({
   const [isUserOnline, setIsUserOnline] = useState<boolean>(false);
   const [isScrolledToBottom, setIsScrolledToBottom] = useState<boolean>(true);
 
-  // --- DERIVED STATE: Calculated unconditionally for use in hook 'enabled' flags ---
   const otherUserId =
     user && bookingDetails
       ? user.id === bookingDetails.ownerId
@@ -68,29 +68,28 @@ const BookingChat = ({
 
   const isReady = !!user && !!bookingDetails && !!otherUserId;
 
-  // --- HOOKS (MUST BE CALLED UNCONDITIONALLY) ---
-
-  // Fetch messages
+  // --- FETCH MESSAGES ---
   const {
     data,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = // L77 warning fixed here
-    useInfiniteQuery({
-      queryKey: ["bookingMessages", bookingId],
-      queryFn: async ({ queryKey, pageParam = 1 }) => {
-        const [, id] = queryKey;
-        const pageNumber = typeof pageParam === "number" ? pageParam : 1;
-        return getBookingMessages(id, pageNumber);
-      },
-      getNextPageParam: (lastPage: PaginatedMessages) =>
-        lastPage.hasMore ? lastPage.nextPage : undefined,
-      initialPageParam: 1,
-      enabled: isReady, // Only fetch when component has all necessary data
-    });
+    isError: isMessagesError, // <-- Error state added
+    error: messagesError, // <-- Error object added
+  } = useInfiniteQuery({
+    queryKey: ["bookingMessages", bookingId],
+    queryFn: async ({ queryKey, pageParam = 1 }) => {
+      const [, id] = queryKey;
+      const pageNumber = typeof pageParam === "number" ? pageParam : 1;
+      return getBookingMessages(id, pageNumber);
+    },
+    getNextPageParam: (lastPage: PaginatedMessages) =>
+      lastPage.hasMore ? lastPage.nextPage : undefined,
+    initialPageParam: 1,
+    enabled: isReady,
+  });
 
-  // Mark messages as read mutation
+  // --- MARK MESSAGES AS READ ---
   const markRead = useMutation({
     mutationFn: () => markMessagesAsRead(bookingId),
     onSuccess: () => {
@@ -99,13 +98,19 @@ const BookingChat = ({
       });
       queryClient.invalidateQueries({ queryKey: ["unreadMessagesBatch"] });
     },
+    // Note: No explicit onError needed here, as mutation failures are often silently handled or logged.
   });
 
-  // Send message mutation
+  // --- SEND MESSAGE ---
   const sendMessageMutation = useMutation({
     mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
       sendMessageHttp(payload),
     onError: (error, variables) => {
+      console.error(
+        "Failed to send message, reverting optimistic update:",
+        error
+      );
+      // Revert optimistic update on failure
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
         (old) => {
@@ -115,6 +120,7 @@ const BookingChat = ({
             pages: old.pages.map((page) => ({
               ...page,
               messages: page.messages.filter(
+                // Remove the message using its temporary ID
                 (msg) => msg.id !== variables.tempId
               ),
             })),
@@ -124,37 +130,45 @@ const BookingChat = ({
     },
   });
 
-  // Fetch other user profile
-  const { data: otherUserProfileData } = useQuery<User>({
+  // --- FETCH OTHER USER PROFILE ---
+  const {
+    data: otherUserProfileData,
+    isError: isProfileError, // <-- Error state added
+    error: profileError, // <-- Error object added
+  } = useQuery<User>({
     queryKey: ["otherUserProfile", otherUserId],
     queryFn: () => getUserProfile(otherUserId!),
     enabled: isReady,
   });
 
-  // Fetch initial online status
-  const { data: initialOnlineStatusData } = useQuery<OnlineStatus>({
+  // --- FETCH INITIAL ONLINE STATUS ---
+  const { 
+    data: initialOnlineStatusData,
+    isLoading: isOnlineLoading, 
+  } = useQuery<OnlineStatus>({ 
     queryKey: ["userOnlineStatus", otherUserId],
     queryFn: () => getUserOnlineStatus(otherUserId!),
     enabled: isReady,
+    staleTime: 60000, // 1 minute
   });
 
-  // Effect to set initial online status
   useEffect(() => {
-    if (initialOnlineStatusData)
-      setIsUserOnline(initialOnlineStatusData.isOnline);
+    // FIX: Add a null/undefined check before accessing the property
+    if (initialOnlineStatusData) {
+      // The type for initialOnlineStatusData is now correctly inferred as OnlineStatus | undefined
+      // If present, it has the 'isOnline' property.
+      setIsUserOnline(initialOnlineStatusData.isOnline); 
+    }
   }, [initialOnlineStatusData]);
 
-  // Effect to mark messages as read
+
   useEffect(() => {
-    // Only attempt to mark read if the component is fully ready
-    if (isReady) {
-      markRead.mutate();
-    }
+    if (isReady) markRead.mutate();
   }, [bookingId, markRead, isReady]);
 
-  // Socket events
+  // --- SOCKET EVENTS ---
   useEffect(() => {
-    if (!isReady) return; // Guard to prevent execution until data is ready
+    if (!isReady) return;
 
     joinBookingRoom(bookingId);
 
@@ -170,6 +184,7 @@ const BookingChat = ({
           let finalMessage = message;
 
           if (message.tempId) {
+            // This is the server confirming a message we sent (replacing temp ID)
             return {
               ...old,
               pages: oldPages.map((page, index) => ({
@@ -196,7 +211,6 @@ const BookingChat = ({
           );
           if (isDuplicate) return old;
 
-          // Attach sender profile if missing
           if (
             message.senderId === otherUserId &&
             !message.sender &&
@@ -266,34 +280,61 @@ const BookingChat = ({
   }, [
     bookingId,
     queryClient,
-    user, // The full user object is stable enough in context
+    user,
     otherUserId,
     markRead,
     otherUserProfileData,
     isReady,
   ]);
 
-  // --- DERIVED STATE FROM HOOKS (Calculated UNCONDITIONALLY) ---
-  // Moved up from after the early return
   const messages: Message[] =
     data?.pages.flatMap((page) => page.messages) ?? [];
 
-  // Scroll to bottom (MOVED UP to be called UNCONDITIONALLY)
   useEffect(() => {
     if (isScrolledToBottom)
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, isScrolledToBottom]);
 
-  // --- EARLY RETURN (NOW SAFE) ---
   if (!bookingDetails || !user) return null;
 
-  // --- REST OF LOGIC (Now safe to be here) ---
+  // --- CRITICAL ERROR RENDERING ---
+  if (isMessagesError || isProfileError) {
+    const errorDetails = isMessagesError
+      ? `Messages Error: ${(messagesError as Error).message}`
+      : `Profile Error: ${(profileError as Error).message}`;
 
-  // Recalculate variables that depend on the non-null user and bookingDetails for use in JSX
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-md"
+          onClick={onClose}
+        />
+        <div className="relative z-10 w-full max-w-3xl mx-auto bg-white border border-red-500 rounded-[3rem] shadow-lg flex flex-col h-[85vh] overflow-hidden p-8 text-center">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">
+            Chat Loading Failed 💔
+          </h2>
+          <p className="text-gray-700 mb-6">
+            We couldn't load the necessary chat data. Please try closing and
+            opening the chat again.
+          </p>
+          <p className="text-sm text-gray-500 mb-6 italic">{errorDetails}</p>
+          <button
+            onClick={onClose}
+            className="p-3 rounded-full bg-red-600 text-white hover:bg-red-700 mx-auto w-40"
+          >
+            Close Chat
+          </button>
+        </div>
+      </div>
+    );
+  }
+  // ---------------------------------
+
   const otherUserName =
     user.id === bookingDetails.ownerId
       ? bookingDetails.renterName
       : bookingDetails.ownerName;
+
   const otherUserProfile =
     user.id === bookingDetails.ownerId
       ? bookingDetails.renterProfile
@@ -348,7 +389,7 @@ const BookingChat = ({
       id: tempId,
       bookingId,
       senderId: user.id,
-      receiverId: otherUserId!, // otherUserId is guaranteed to be defined here due to the early return guard
+      receiverId: otherUserId!,
       content,
       createdAt: now,
       updatedAt: now,
@@ -362,6 +403,7 @@ const BookingChat = ({
       delivered: false,
     };
 
+    // Optimistic Update
     queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
       ["bookingMessages", bookingId],
       (old) => {
@@ -425,10 +467,12 @@ const BookingChat = ({
           <CheckIconSolid className="w-3 h-3 -ml-1.5" />
         </span>
       );
+    // You could add an icon here for 'sending' or 'failed' if needed
     return null;
   };
 
   const getStatusText = () => {
+    if (isOnlineLoading) return "Loading status..."; // <-- Added loading state check
     if (isUserOnline) return "Online";
     if (!otherUserProfileData?.lastSeen) return "Offline";
     const lastSeenDate = new Date(otherUserProfileData.lastSeen);
@@ -465,7 +509,7 @@ const BookingChat = ({
                   className="rounded-full object-cover border-4 border-white shadow-xl"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full border-4 border-white shadow-xl bg-gray-300 flex items-center justify-center" />
+                <DefaultProfileIcon size={64} />
               )}
               <span
                 className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
@@ -512,13 +556,17 @@ const BookingChat = ({
             >
               {msg.senderId !== user.id && (
                 <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mb-1">
-                  <Image
-                    src={msg.sender?.profilePicture || "/default-avatar.png"}
-                    alt={msg.sender?.name || "User"}
-                    width={32}
-                    height={32}
-                    className="object-cover"
-                  />
+                  {msg.sender?.profilePicture ? (
+                    <Image
+                      src={msg.sender.profilePicture}
+                      alt={msg.sender?.name || "User"}
+                      width={32}
+                      height={32}
+                      className="object-cover rounded-full"
+                    />
+                  ) : (
+                    <DefaultProfileIcon size={32} />
+                  )}
                 </div>
               )}
               <div className="relative max-w-[70%]">
@@ -563,6 +611,7 @@ const BookingChat = ({
           <button
             type="submit"
             className="bg-purple-700 text-white p-3 rounded-full hover:bg-purple-800"
+            disabled={!newMessage.trim()} // Disable send button if empty
           >
             <PaperAirplaneIcon className="w-5 h-5 rotate-45" />
           </button>

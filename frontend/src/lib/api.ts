@@ -1,4 +1,3 @@
-// frontend/lib/api.ts
 import axios, { AxiosResponse, AxiosError, AxiosRequestConfig } from "axios";
 import { io as ClientIO, Socket } from "socket.io-client";
 import { toast } from "react-hot-toast";
@@ -168,7 +167,7 @@ export const getBookingMessages = async (
 };
 
 export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
-  await api.post(`/api/bookings/${bookingId}/messages/read`);
+  await api.patch(`/api/bookings/${bookingId}/messages/read`);
 };
 
 export const getUnreadMessages = async (
@@ -316,7 +315,7 @@ export const getUserOnlineStatus = async (
   userId: string
 ): Promise<OnlineStatus> => {
   const res: AxiosResponse<ApiResponse<OnlineStatus>> = await api.get(
-    `/api/users/${userId}/status`
+    `/api/bookings/online-status/${userId}`
   );
   return res.data.data;
 };
