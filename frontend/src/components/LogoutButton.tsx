@@ -1,26 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRightEndOnRectangleIcon } from "@heroicons/react/24/outline";
-import { logoutUser } from "@/lib/api";
 import { useAuth } from "@/app/context/AuthProvider";
 
 const LogoutButton = () => {
   const { logout } = useAuth();
-  const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await logoutUser();
-      logout();
-      router.push("/");
+      await logout(); // handles backend + local cleanup + redirect
     } catch (error) {
       console.error("Logout failed:", error);
-      logout();
-      router.push("/");
     } finally {
       setIsLoggingOut(false);
     }

@@ -161,7 +161,7 @@ const CheckoutPage = () => {
               <ImageWithLoader
                 src={
                   booking.listing.images[0]
-                    ? `/${booking.listing.images[0]}`
+                    ? `${booking.listing.images[0]}`
                     : "/invalid-path.png"
                 }
                 alt={booking.listing.title}

@@ -9,7 +9,6 @@ import { useAuth } from "@/app/context/AuthProvider";
 import { StarIcon } from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { UserCircleIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
 import LoadingScreen from "@/components/LoadingScreen";
 import ImageWithLoader from "@/components/ImageWithLoader";
 import { ReviewSchema } from "@/validation/review";

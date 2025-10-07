@@ -33,7 +33,7 @@ import { CheckIcon as CheckIconSolid } from "@heroicons/react/20/solid";
 import socket from "@/lib/socket";
 import { useAuth } from "@/app/context/AuthProvider";
 import Image from "next/image";
-import DefaultProfileIcon from "@/components/DefaultProfileIcon"; // <- SVG Component
+import DefaultProfileIcon from "@/components/DefaultProfileIcon";
 
 interface BookingChatProps {
   bookingId: string;
@@ -74,8 +74,8 @@ const BookingChat = ({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-    isError: isMessagesError, // <-- Error state added
-    error: messagesError, // <-- Error object added
+    isError: isMessagesError,
+    error: messagesError,
   } = useInfiniteQuery({
     queryKey: ["bookingMessages", bookingId],
     queryFn: async ({ queryKey, pageParam = 1 }) => {
@@ -98,7 +98,6 @@ const BookingChat = ({
       });
       queryClient.invalidateQueries({ queryKey: ["unreadMessagesBatch"] });
     },
-    // Note: No explicit onError needed here, as mutation failures are often silently handled or logged.
   });
 
   // --- SEND MESSAGE ---
@@ -110,7 +109,6 @@ const BookingChat = ({
         "Failed to send message, reverting optimistic update:",
         error
       );
-      // Revert optimistic update on failure
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
         (old) => {
@@ -120,7 +118,6 @@ const BookingChat = ({
             pages: old.pages.map((page) => ({
               ...page,
               messages: page.messages.filter(
-                // Remove the message using its temporary ID
                 (msg) => msg.id !== variables.tempId
               ),
             })),
@@ -133,8 +130,8 @@ const BookingChat = ({
   // --- FETCH OTHER USER PROFILE ---
   const {
     data: otherUserProfileData,
-    isError: isProfileError, // <-- Error state added
-    error: profileError, // <-- Error object added
+    isError: isProfileError,
+    error: profileError,
   } = useQuery<User>({
     queryKey: ["otherUserProfile", otherUserId],
     queryFn: () => getUserProfile(otherUserId!),
@@ -142,25 +139,18 @@ const BookingChat = ({
   });
 
   // --- FETCH INITIAL ONLINE STATUS ---
-  const { 
-    data: initialOnlineStatusData,
-    isLoading: isOnlineLoading, 
-  } = useQuery<OnlineStatus>({ 
-    queryKey: ["userOnlineStatus", otherUserId],
-    queryFn: () => getUserOnlineStatus(otherUserId!),
-    enabled: isReady,
-    staleTime: 60000, // 1 minute
-  });
+  const { data: initialOnlineStatusData, isLoading: isOnlineLoading } =
+    useQuery<OnlineStatus>({
+      queryKey: ["userOnlineStatus", otherUserId],
+      queryFn: () => getUserOnlineStatus(otherUserId!),
+      enabled: isReady,
+      staleTime: 60000,
+    });
 
   useEffect(() => {
-    // FIX: Add a null/undefined check before accessing the property
-    if (initialOnlineStatusData) {
-      // The type for initialOnlineStatusData is now correctly inferred as OnlineStatus | undefined
-      // If present, it has the 'isOnline' property.
-      setIsUserOnline(initialOnlineStatusData.isOnline); 
-    }
+    if (initialOnlineStatusData)
+      setIsUserOnline(initialOnlineStatusData.isOnline);
   }, [initialOnlineStatusData]);
-
 
   useEffect(() => {
     if (isReady) markRead.mutate();
@@ -184,7 +174,6 @@ const BookingChat = ({
           let finalMessage = message;
 
           if (message.tempId) {
-            // This is the server confirming a message we sent (replacing temp ID)
             return {
               ...old,
               pages: oldPages.map((page, index) => ({
@@ -314,8 +303,8 @@ const BookingChat = ({
             Chat Loading Failed 💔
           </h2>
           <p className="text-gray-700 mb-6">
-            We couldn't load the necessary chat data. Please try closing and
-            opening the chat again.
+            We couldn&apos;t load the necessary chat data. Please try closing
+            and opening the chat again.
           </p>
           <p className="text-sm text-gray-500 mb-6 italic">{errorDetails}</p>
           <button
@@ -328,7 +317,6 @@ const BookingChat = ({
       </div>
     );
   }
-  // ---------------------------------
 
   const otherUserName =
     user.id === bookingDetails.ownerId
@@ -467,12 +455,11 @@ const BookingChat = ({
           <CheckIconSolid className="w-3 h-3 -ml-1.5" />
         </span>
       );
-    // You could add an icon here for 'sending' or 'failed' if needed
     return null;
   };
 
   const getStatusText = () => {
-    if (isOnlineLoading) return "Loading status..."; // <-- Added loading state check
+    if (isOnlineLoading) return "Loading status...";
     if (isUserOnline) return "Online";
     if (!otherUserProfileData?.lastSeen) return "Offline";
     const lastSeenDate = new Date(otherUserProfileData.lastSeen);
@@ -579,44 +566,44 @@ const BookingChat = ({
                 >
                   {msg.content}
                 </div>
-                <div className="absolute bottom-0 right-0 -mb-4 -mr-1">
+                <div className="absolute bottom-0 right-0 translate-x-full -translate-y-1/2">
                   <MessageStatusIcon message={msg} />
                 </div>
               </div>
             </div>
           ))}
           <div ref={messagesEndRef} />
-          {!isScrolledToBottom && (
-            <button
-              onClick={scrollToBottom}
-              className="absolute bottom-4 right-4 bg-purple-700 text-white p-2 rounded-full shadow-lg"
-            >
-              <ArrowUpIcon className="w-5 h-5" />
-            </button>
-          )}
         </div>
 
         {/* Input */}
         <form
           onSubmit={handleSubmit}
-          className="flex items-center gap-2 p-6 bg-white/70 backdrop-blur-xl rounded-b-[3rem] border-t border-gray-200"
+          className="flex gap-3 p-6 border-t border-gray-300 bg-white/70 backdrop-blur-xl"
         >
           <input
             type="text"
             value={newMessage}
             onChange={handleInputChange}
             placeholder="Type a message..."
-            className="flex-1 px-4 py-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="flex-1 rounded-full border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
           />
           <button
             type="submit"
-            className="bg-purple-700 text-white p-3 rounded-full hover:bg-purple-800"
-            disabled={!newMessage.trim()} // Disable send button if empty
+            className="p-3 bg-purple-700 text-white rounded-full hover:bg-purple-800"
           >
-            <PaperAirplaneIcon className="w-5 h-5 rotate-45" />
+            <PaperAirplaneIcon className="w-5 h-5 rotate-90" />
           </button>
         </form>
       </div>
+
+      {!isScrolledToBottom && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-24 right-10 p-3 rounded-full bg-purple-700 text-white shadow-lg hover:bg-purple-800"
+        >
+          <ArrowUpIcon className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 };

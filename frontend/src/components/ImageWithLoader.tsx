@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Image, { ImageProps } from "next/image";
 
 interface ImageWithLoaderProps extends Omit<ImageProps, "onLoadingComplete"> {
@@ -10,23 +10,26 @@ interface ImageWithLoaderProps extends Omit<ImageProps, "onLoadingComplete"> {
 }
 
 /**
- * A reusable, glassy image component with gradient loader and inline SVG fallback.
- * Fully consistent with Hub Scout neon-gradient design.
+ * Responsive image with built-in loader, fallback, and smooth transitions.
  */
 export default function ImageWithLoader({
   loaderType = "spinner",
   className = "",
   containerClassName = "",
+  alt = "Image", // ✅ Default alt prop for accessibility
   ...props
 }: ImageWithLoaderProps) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleError = () => setHasError(true);
 
   return (
     <div
+      ref={containerRef}
       className={`relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-900/10 to-gray-900/10 backdrop-blur-md ${containerClassName}`}
+      style={{ width: "100%", height: "100%" }}
     >
       {/* Loader */}
       {!isLoaded && !hasError && (
@@ -39,14 +42,15 @@ export default function ImageWithLoader({
         </div>
       )}
 
-      {/* Actual Image or Inline SVG Fallback */}
+      {/* Image or fallback */}
       {hasError ? (
-        <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-purple-200 via-pink-100 to-blue-200">
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-200 via-pink-100 to-blue-200">
           <svg
             className="w-16 h-16 text-purple-500"
             xmlns="http://www.w3.org/2000/svg"
-            fill="none"
             viewBox="0 0 64 64"
+            role="img"
+            aria-label="Broken image icon"
           >
             <rect
               width="64"
@@ -62,16 +66,37 @@ export default function ImageWithLoader({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            <line
+              x1="16"
+              y1="16"
+              x2="48"
+              y2="48"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
+            <line
+              x1="48"
+              y1="16"
+              x2="16"
+              y2="48"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
       ) : (
         <Image
           {...props}
-          onLoadingComplete={() => setIsLoaded(true)}
+          alt={alt} // Ensures no missing alt prop
+          onLoad={() => setIsLoaded(true)}
           onError={handleError}
           className={`transition-opacity duration-700 ease-in-out object-cover ${
             isLoaded ? "opacity-100" : "opacity-0"
           } ${className}`}
+          fill
+          style={{ objectFit: "cover" }}
         />
       )}
     </div>

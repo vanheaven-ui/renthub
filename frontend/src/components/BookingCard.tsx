@@ -27,7 +27,6 @@ const BookingCard = ({
   onCheckoutClick,
 }: BookingCardProps) => {
   const { user } = useAuth();
-
   const isRenter = user?.id === booking.renterId;
   const isOwner = user?.id === booking.ownerId;
   const showPaymentButton = isRenter && booking.paymentStatus === "PENDING";
@@ -55,28 +54,54 @@ const BookingCard = ({
     }
   };
 
+  const listing = booking.listing;
+  if (!listing) {
+    return (
+      <div className="p-6 bg-gray-100 rounded-3xl text-center text-gray-500">
+        Listing unavailable
+      </div>
+    );
+  }
+
   return (
     <div className="relative p-6 bg-white/50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden group transition-all duration-500 hover:scale-[1.03] transform">
       <div className="absolute inset-0 bg-gradient-to-br from-pink-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
       <div className="relative z-10 flex flex-col h-full">
-        {/* Listing Image */}
-        <div className="relative w-full h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white mb-4">
-          {booking.listing?.images?.[0] ? (
-            <ImageWithLoader
-              src={`/${booking.listing.images[0]}`}
-              alt={booking.listing?.title ?? "Listing image"}
-              fill
-              className="object-cover"
-              containerClassName="rounded-2xl"
-              loaderType="spinner"
-            />
+        {/* Images stacked uniquely */}
+        <div className="relative w-full h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white mb-4 flex items-center justify-center">
+          {listing.images && listing.images.length > 0 ? (
+            <div className="relative w-full h-full">
+              {listing.images.map((img, idx) => (
+                <div
+                  key={idx}
+                  className={`absolute top-0 left-0 w-full h-full transition-transform duration-500`}
+                  style={{
+                    transform: `rotate(${
+                      (idx - listing.images.length / 2) * 3
+                    }deg) translate(${
+                      (idx - listing.images.length / 2) * 4
+                    }px, ${(idx - listing.images.length / 2) * 4}px)`,
+                    zIndex: listing.images.length - idx,
+                  }}
+                >
+                  <ImageWithLoader
+                    src={img}
+                    alt={listing.title ?? "Listing image"}
+                    fill
+                    className="object-cover rounded-2xl shadow-xl"
+                    containerClassName="w-full h-full"
+                    loaderType="spinner"
+                  />
+                </div>
+              ))}
+            </div>
           ) : (
             <ImageWithLoader
-              src="/invalid-path.png"
+              src=""
               alt="Listing fallback image"
               fill
-              className="object-cover"
-              containerClassName="rounded-2xl"
+              className="object-cover rounded-2xl shadow-xl"
+              containerClassName="w-full h-full"
             />
           )}
         </div>
@@ -84,7 +109,7 @@ const BookingCard = ({
         {/* Title & Status */}
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-xl font-bold text-gray-900 leading-tight">
-            {booking.listing?.title}
+            {listing.title}
           </h2>
           <span
             className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
@@ -97,7 +122,6 @@ const BookingCard = ({
 
         {/* Booking Info */}
         <div className="text-sm text-gray-600 space-y-2 flex-grow">
-          {/* Renter / Owner */}
           <div className="flex items-center">
             <UserCircleIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
@@ -107,7 +131,6 @@ const BookingCard = ({
             </span>
           </div>
 
-          {/* Booking Dates */}
           <div className="flex items-center">
             <CalendarDaysIcon className="w-5 h-5 text-gray-500 mr-2" />
             <span>
@@ -115,7 +138,6 @@ const BookingCard = ({
             </span>
           </div>
 
-          {/* Total Amount */}
           <div className="flex items-center justify-between mt-2 p-3 bg-purple-50 rounded-xl shadow-inner border border-purple-100">
             <span className="text-gray-700 font-semibold text-sm">
               Total Amount
