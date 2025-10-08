@@ -16,7 +16,7 @@ export default function ImageWithLoader({
   loaderType = "spinner",
   className = "",
   containerClassName = "",
-  alt = "Image", // ✅ Default alt prop for accessibility
+  alt = "Image",
   ...props
 }: ImageWithLoaderProps) {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -24,6 +24,12 @@ export default function ImageWithLoader({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleError = () => setHasError(true);
+
+  // ✅ Ensure Next.js Image gets only valid URLs
+  const safeSrc =
+    props.src && typeof props.src === "string" && props.src.startsWith("http")
+      ? props.src
+      : undefined;
 
   return (
     <div
@@ -43,7 +49,7 @@ export default function ImageWithLoader({
       )}
 
       {/* Image or fallback */}
-      {hasError ? (
+      {hasError || !safeSrc ? (
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-200 via-pink-100 to-blue-200">
           <svg
             className="w-16 h-16 text-purple-500"
@@ -89,7 +95,8 @@ export default function ImageWithLoader({
       ) : (
         <Image
           {...props}
-          alt={alt} // Ensures no missing alt prop
+          src={safeSrc}
+          alt={alt}
           onLoad={() => setIsLoaded(true)}
           onError={handleError}
           className={`transition-opacity duration-700 ease-in-out object-cover ${
@@ -102,3 +109,4 @@ export default function ImageWithLoader({
     </div>
   );
 }
+import axios, { AxiosError, AxiosRequestConfig } from "axios";
