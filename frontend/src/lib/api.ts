@@ -314,10 +314,10 @@ export const getUserProfile = async (userId: string): Promise<User> => {
 export const getUserOnlineStatus = async (
   userId: string
 ): Promise<OnlineStatus> => {
-  const res: AxiosResponse<ApiResponse<OnlineStatus>> = await api.get(
+  const res: AxiosResponse<OnlineStatus> = await api.get(
     `/api/bookings/online-status/${userId}`
   );
-  return res.data.data;
+  return res.data;
 };
 
 // ----------------- AI -----------------
