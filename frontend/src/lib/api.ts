@@ -1,5 +1,4 @@
 import axios, { AxiosResponse, AxiosError, AxiosRequestConfig } from "axios";
-import { io as ClientIO, Socket } from "socket.io-client";
 import { toast } from "react-hot-toast";
 import {
   ApiResponse,
@@ -10,19 +9,19 @@ import {
   BookingPayload,
   Booking,
   User,
-  Message,
-  SendMessagePayload,
   BookingStatus,
   Review,
   InitiatePaymentPayload,
-  PaginatedMessages,
   PaymentResponse,
-  UnreadCount,
   OnlineStatus,
+  Message,
+  SendMessagePayload,
+  PaginatedMessages,
   AskExpertPayload,
   AskExpertResponse,
   GenerateDescriptionPayload,
   GenerateDescriptionResponse,
+  UnreadCount,
 } from "../types";
 
 // ----------------- Types -----------------
@@ -117,79 +116,6 @@ export const registerUser = async (
 
 export const logoutUser = async (): Promise<void> => {
   await api.post("/api/auth/logout");
-};
-
-// ----------------- Socket / Messaging -----------------
-const socket: Socket = ClientIO(API_BASE, { withCredentials: true });
-
-export const sendMessageHttp = async (
-  payload: SendMessagePayload & { tempId: string }
-): Promise<Message & { tempId: string }> => {
-  const res: AxiosResponse<Message & { tempId: string }> = await api.post(
-    `/api/bookings/${payload.bookingId}/messages`,
-    payload
-  );
-  return res.data;
-};
-
-export const sendMessageSocket = (
-  message: SendMessagePayload & { tempId: string }
-) => {
-  socket.emit("sendMessage", message);
-};
-
-export const onNewMessage = (
-  bookingId: string,
-  callback: (message: Message & { tempId?: string }) => void
-) => {
-  const handler = (message: Message & { tempId?: string }) => {
-    if (message.bookingId === bookingId) callback(message);
-  };
-  socket.on("newMessage", handler);
-  return () => socket.off("newMessage", handler);
-};
-
-export const joinBookingRoom = (bookingId: string) => {
-  socket.emit("joinRoom", { bookingId });
-};
-
-// ----------------- Messaging HTTP -----------------
-export const getBookingMessages = async (
-  bookingId: string,
-  page = 1,
-  limit = 20
-): Promise<PaginatedMessages> => {
-  const res: AxiosResponse<PaginatedMessages> = await api.get(
-    `/api/bookings/${bookingId}/messages`,
-    { params: { page, limit } } as CustomAxiosRequestConfig
-  );
-  return res.data;
-};
-
-export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
-  await api.patch(`/api/bookings/${bookingId}/messages/read`);
-};
-
-export const getUnreadMessages = async (
-  bookingId: string
-): Promise<{ unreadCount: number }> => {
-  const res: AxiosResponse<{ unreadCount: number }> = await api.get(
-    `/api/bookings/${bookingId}/messages/unread`,
-    { silenceToast: true } as CustomAxiosRequestConfig
-  );
-  return res.data;
-};
-
-export const getUnreadMessagesBatch = async (
-  bookingIds: string[]
-): Promise<UnreadCount[]> => {
-  if (!bookingIds || !Array.isArray(bookingIds)) return [];
-  const res: AxiosResponse<UnreadCount[]> = await api.post(
-    "/api/bookings/unread/batch",
-    { bookingIds },
-    { silenceToast: true } as CustomAxiosRequestConfig
-  );
-  return res.data;
 };
 
 // ----------------- Listings -----------------
@@ -318,6 +244,45 @@ export const getUserOnlineStatus = async (
     `/api/bookings/online-status/${userId}`
   );
   return res.data;
+};
+
+// ----------------- Messaging HTTP -----------------
+export const getBookingMessages = async (
+  bookingId: string,
+  page = 1,
+  limit = 20
+): Promise<PaginatedMessages> => {
+  const res: AxiosResponse<PaginatedMessages> = await api.get(
+    `/api/bookings/${bookingId}/messages`,
+    { params: { page, limit } } as CustomAxiosRequestConfig
+  );
+  return res.data;
+};
+
+export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
+  await api.patch(`/api/bookings/${bookingId}/messages/read`);
+};
+
+export const sendMessageHttp = async (
+  payload: SendMessagePayload & { tempId: string }
+): Promise<Message & { tempId: string }> => {
+  const res: AxiosResponse<Message & { tempId: string }> = await api.post(
+    `/api/bookings/${payload.bookingId}/messages`,
+    payload
+  );
+  return res.data;
+};
+
+export const getUnreadMessagesBatch = async (
+  bookingIds: string[]
+): Promise<UnreadCount[]> => {
+  const res = await axios.post<{ data: UnreadCount[] }>(
+    `${API_BASE}/api/bookings/unread/batch`,
+    { bookingIds },
+    { withCredentials: true }
+  );
+
+  return res.data.data;
 };
 
 // ----------------- AI -----------------
