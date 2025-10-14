@@ -4,18 +4,10 @@ import { useEffect, useState, useRef, FormEvent, ChangeEvent } from "react";
 import {
   useInfiniteQuery,
   useMutation,
+  useQuery,
   useQueryClient,
   InfiniteData,
-  useQuery,
 } from "@tanstack/react-query";
-import {
-  getBookingMessages,
-  markMessagesAsRead,
-  getUserOnlineStatus,
-  getUserProfile,
-  sendMessageHttp,
-  joinBookingRoom,
-} from "@/lib/api";
 import {
   Message,
   User,
@@ -30,8 +22,15 @@ import {
   ArrowUpIcon,
 } from "@heroicons/react/24/outline";
 import { CheckIcon as CheckIconSolid } from "@heroicons/react/20/solid";
-import socket from "@/lib/socket";
+import * as chatService from "@/services/chatService";
 import { useAuth } from "@/app/context/AuthProvider";
+import {
+  getBookingMessages,
+  getUserOnlineStatus,
+  getUserProfile,
+  markMessagesAsRead,
+  sendMessageHttp,
+} from "@/lib/api";
 import Image from "next/image";
 import DefaultProfileIcon from "@/components/DefaultProfileIcon";
 
@@ -39,6 +38,11 @@ interface BookingChatProps {
   bookingId: string;
   onClose: () => void;
   bookingDetails: BookingDetails | null;
+}
+
+// Extend Message to optionally include delivered
+export interface MessageWithDelivered extends Message {
+  delivered?: boolean;
 }
 
 const BookingChat = ({
@@ -68,29 +72,30 @@ const BookingChat = ({
 
   const isReady = !!user && !!bookingDetails && !!otherUserId;
 
-  // --- FETCH MESSAGES ---
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isError: isMessagesError,
-    error: messagesError,
-  } = useInfiniteQuery({
-    queryKey: ["bookingMessages", bookingId],
-    queryFn: async ({ queryKey, pageParam = 1 }) => {
-      const [, id] = queryKey;
-      const pageNumber = typeof pageParam === "number" ? pageParam : 1;
-      return getBookingMessages(id, pageNumber);
-    },
-    getNextPageParam: (lastPage: PaginatedMessages) =>
-      lastPage.hasMore ? lastPage.nextPage : undefined,
-    initialPageParam: 1,
-    enabled: isReady,
-  });
+  // -------------------- FETCH MESSAGES --------------------
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery<
+      PaginatedMessages,
+      Error, 
+      InfiniteData<PaginatedMessages>, 
+      ["bookingMessages", string],
+      number
+    >({
+      queryKey: ["bookingMessages", bookingId],
+      queryFn: async ({ pageParam = 1 }) =>
+        getBookingMessages(bookingId, pageParam),
+      getNextPageParam: (lastPage) =>
+        lastPage.hasMore ? lastPage.nextPage : undefined,
+      initialPageParam: 1,
+      enabled: isReady,
+    });
 
-  // --- MARK MESSAGES AS READ ---
-  const markRead = useMutation({
+  // Flatten messages safely
+  const messages: MessageWithDelivered[] =
+    data?.pages.flatMap((page) => page.messages) ?? [];
+
+  // -------------------- MARK AS READ --------------------
+  const markReadMutation = useMutation({
     mutationFn: () => markMessagesAsRead(bookingId),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -100,15 +105,15 @@ const BookingChat = ({
     },
   });
 
-  // --- SEND MESSAGE ---
+  useEffect(() => {
+    if (isReady) markReadMutation.mutate();
+  }, [bookingId, markReadMutation, isReady]);
+
+  // -------------------- SEND MESSAGE --------------------
   const sendMessageMutation = useMutation({
     mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
       sendMessageHttp(payload),
     onError: (error, variables) => {
-      console.error(
-        "Failed to send message, reverting optimistic update:",
-        error
-      );
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
         (old) => {
@@ -127,207 +132,151 @@ const BookingChat = ({
     },
   });
 
-  // --- FETCH OTHER USER PROFILE ---
-  const {
-    data: otherUserProfileData,
-    isError: isProfileError,
-    error: profileError,
-  } = useQuery<User>({
+  // -------------------- FETCH OTHER USER --------------------
+  const { data: otherUserProfileData } = useQuery<User>({
     queryKey: ["otherUserProfile", otherUserId],
     queryFn: () => getUserProfile(otherUserId!),
     enabled: isReady,
   });
 
-  // --- FETCH INITIAL ONLINE STATUS ---
-  const { data: initialOnlineStatusData, isLoading: isOnlineLoading } =
-    useQuery<OnlineStatus>({
-      queryKey: ["userOnlineStatus", otherUserId],
-      queryFn: () => getUserOnlineStatus(otherUserId!),
-      enabled: isReady,
-      staleTime: 60000,
-    });
+  // -------------------- ONLINE STATUS --------------------
+  const { data: initialOnlineStatusData } = useQuery<OnlineStatus>({
+    queryKey: ["userOnlineStatus", otherUserId],
+    queryFn: () => getUserOnlineStatus(otherUserId!),
+    enabled: isReady,
+    staleTime: 60000,
+  });
 
   useEffect(() => {
     if (initialOnlineStatusData)
       setIsUserOnline(initialOnlineStatusData.isOnline);
   }, [initialOnlineStatusData]);
 
-  useEffect(() => {
-    if (isReady) markRead.mutate();
-  }, [bookingId, markRead, isReady]);
-
-  // --- SOCKET EVENTS ---
+  // -------------------- SOCKET EVENTS --------------------
   useEffect(() => {
     if (!isReady) return;
 
-    joinBookingRoom(bookingId);
+    chatService.joinBookingRoom(bookingId);
 
-    const handleNewMessage = (message: Message & { tempId?: string }) => {
-      queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-        ["bookingMessages", bookingId],
-        (old) => {
-          if (!old) return old;
-          const oldPages = old.pages;
-          const lastPage = oldPages[oldPages.length - 1];
-          if (!lastPage) return old;
+    const offNewMessage = chatService.onNewMessage(
+      (message: MessageWithDelivered) => {
+        queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+          ["bookingMessages", bookingId],
+          (old) => {
+            if (!old) return old;
+            const lastPage = old.pages[old.pages.length - 1];
+            if (!lastPage) return old;
 
-          let finalMessage = message;
+            const isDuplicate = old.pages.some((p) =>
+              p.messages.some((m) => m.id === message.id)
+            );
+            if (isDuplicate) return old;
 
-          if (message.tempId) {
+            if (message.senderId !== user.id) markReadMutation.mutate();
+
             return {
               ...old,
-              pages: oldPages.map((page, index) => ({
-                ...page,
-                messages:
-                  index === oldPages.length - 1
-                    ? page.messages.map((msg) =>
-                        msg.id === message.tempId
-                          ? {
-                              ...message,
-                              id: message.id,
-                              delivered: true,
-                              createdAt: message.createdAt,
-                            }
-                          : msg
-                      )
-                    : page.messages,
-              })),
+              pages: [
+                ...old.pages.slice(0, -1),
+                { ...lastPage, messages: [...lastPage.messages, message] },
+              ],
             };
           }
-
-          const isDuplicate = oldPages.some((page) =>
-            page.messages.some((msg) => msg.id === message.id)
-          );
-          if (isDuplicate) return old;
-
-          if (
-            message.senderId === otherUserId &&
-            !message.sender &&
-            otherUserProfileData
-          ) {
-            finalMessage = { ...message, sender: otherUserProfileData };
-          }
-
-          if (finalMessage.senderId !== user.id) markRead.mutate();
-
-          return {
-            ...old,
-            pages: [
-              ...oldPages.slice(0, -1),
-              { ...lastPage, messages: [...lastPage.messages, finalMessage] },
-            ],
-          };
-        }
-      );
-    };
-
-    const handleMessageRead = (data: {
-      messageId: string;
-      bookingId: string;
-      readAt: string;
-    }) => {
-      if (data.bookingId !== bookingId) return;
-      queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-        ["bookingMessages", bookingId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              messages: page.messages.map((msg) =>
-                msg.senderId === user.id &&
-                !msg.read &&
-                new Date(msg.createdAt) <= new Date(data.readAt)
-                  ? { ...msg, read: true, readAt: data.readAt }
-                  : msg
-              ),
-            })),
-          };
-        }
-      );
-    };
-
-    socket.on("newMessage", handleNewMessage);
-    socket.on("messageRead", handleMessageRead);
-    socket.on("userTyping", () => setIsOtherUserTyping(true));
-    socket.on("userStoppedTyping", () => setIsOtherUserTyping(false));
-    socket.on(
-      "userOnlineStatus",
-      (data: { userId: string; isOnline: boolean }) => {
-        if (data.userId === otherUserId) setIsUserOnline(data.isOnline);
+        );
       }
     );
 
-    return () => {
-      socket.off("newMessage", handleNewMessage);
-      socket.off("messageRead", handleMessageRead);
-      socket.off("userTyping");
-      socket.off("userStoppedTyping");
-      socket.off("userOnlineStatus");
-    };
-  }, [
-    bookingId,
-    queryClient,
-    user,
-    otherUserId,
-    markRead,
-    otherUserProfileData,
-    isReady,
-  ]);
-
-  const messages: Message[] =
-    data?.pages.flatMap((page) => page.messages) ?? [];
-
-  useEffect(() => {
-    if (isScrolledToBottom)
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, isScrolledToBottom]);
-
-  if (!bookingDetails || !user) return null;
-
-  // --- CRITICAL ERROR RENDERING ---
-  if (isMessagesError || isProfileError) {
-    const errorDetails = isMessagesError
-      ? `Messages Error: ${(messagesError as Error).message}`
-      : `Profile Error: ${(profileError as Error).message}`;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div
-          className="absolute inset-0 bg-black/60 backdrop-blur-md"
-          onClick={onClose}
-        />
-        <div className="relative z-10 w-full max-w-3xl mx-auto bg-white border border-red-500 rounded-[3rem] shadow-lg flex flex-col h-[85vh] overflow-hidden p-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">
-            Chat Loading Failed 💔
-          </h2>
-          <p className="text-gray-700 mb-6">
-            We couldn&apos;t load the necessary chat data. Please try closing
-            and opening the chat again.
-          </p>
-          <p className="text-sm text-gray-500 mb-6 italic">{errorDetails}</p>
-          <button
-            onClick={onClose}
-            className="p-3 rounded-full bg-red-600 text-white hover:bg-red-700 mx-auto w-40"
-          >
-            Close Chat
-          </button>
-        </div>
-      </div>
+    const offTyping = chatService.onUserTyping(() =>
+      setIsOtherUserTyping(true)
     );
-  }
+    const offStopTyping = chatService.onUserStopTyping(() =>
+      setIsOtherUserTyping(false)
+    );
+    const offOnline = chatService.onUserOnlineStatus((data) => {
+      if (data.userId === otherUserId) setIsUserOnline(data.isOnline);
+    });
 
-  const otherUserName =
-    user.id === bookingDetails.ownerId
-      ? bookingDetails.renterName
-      : bookingDetails.ownerName;
+    return () => {
+      offNewMessage();
+      offTyping();
+      offStopTyping();
+      offOnline();
+    };
+  }, [bookingId, queryClient, user, otherUserId, markReadMutation, isReady]);
 
-  const otherUserProfile =
-    user.id === bookingDetails.ownerId
-      ? bookingDetails.renterProfile
-      : bookingDetails.ownerProfile;
+  // -------------------- INPUT HANDLERS --------------------
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    const now = Date.now();
 
+    if (now - lastTypingEmit.current > 500) {
+      chatService.emitTyping({ bookingId, userId: user!.id });
+      lastTypingEmit.current = now;
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      chatService.emitStopTyping({ bookingId, userId: user!.id });
+      typingTimeoutRef.current = null;
+      lastTypingEmit.current = 0;
+    }, 1200);
+  };
+
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user || !otherUserId) return;
+
+    const content = newMessage.trim();
+    const tempId = Date.now().toString();
+    const now = new Date().toISOString();
+
+    const tempMessage: MessageWithDelivered = {
+      id: tempId,
+      bookingId,
+      senderId: user.id,
+      receiverId: otherUserId,
+      content,
+      createdAt: now,
+      updatedAt: now,
+      sender: {
+        id: user.id,
+        name: user.name ?? "You",
+        profilePicture: user.profilePicture ?? "",
+      },
+      read: false,
+      readAt: null,
+      delivered: false,
+    };
+
+    queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+      ["bookingMessages", bookingId],
+      (old) => {
+        if (!old) return old;
+        const lastPage = old.pages[old.pages.length - 1];
+        if (!lastPage) return old;
+        return {
+          ...old,
+          pages: [
+            ...old.pages.slice(0, -1),
+            { ...lastPage, messages: [...lastPage.messages, tempMessage] },
+          ],
+        };
+      }
+    );
+
+    sendMessageMutation.mutate({
+      bookingId,
+      content,
+      senderId: user.id,
+      receiverId: otherUserId,
+      tempId,
+    });
+
+    setNewMessage("");
+    setIsScrolledToBottom(true);
+  };
+
+  // -------------------- SCROLL HANDLER --------------------
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -349,84 +298,6 @@ const BookingChat = ({
     }
   };
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setNewMessage(e.target.value);
-    const now = Date.now();
-    if (now - lastTypingEmit.current > 500) {
-      socket.emit("typing", { bookingId, userId: user.id });
-      lastTypingEmit.current = now;
-    }
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stopTyping", { bookingId, userId: user.id });
-      typingTimeoutRef.current = null;
-      lastTypingEmit.current = 0;
-    }, 1200);
-  };
-
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!newMessage.trim()) return;
-
-    const content = newMessage.trim();
-    const tempId = Date.now().toString();
-    const now = new Date().toISOString();
-
-    const tempMessage: Message & { delivered: boolean } = {
-      id: tempId,
-      bookingId,
-      senderId: user.id,
-      receiverId: otherUserId!,
-      content,
-      createdAt: now,
-      updatedAt: now,
-      sender: {
-        id: user.id,
-        name: user.name ?? "You",
-        profilePicture: user.profilePicture ?? "",
-      },
-      read: false,
-      readAt: null,
-      delivered: false,
-    };
-
-    // Optimistic Update
-    queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-      ["bookingMessages", bookingId],
-      (old) => {
-        if (!old) return old;
-        const oldPages = old.pages;
-        const lastPage = oldPages[oldPages.length - 1];
-        if (!lastPage) return old;
-        const isDuplicate = lastPage.messages.some(
-          (msg) => msg.id === tempMessage.id
-        );
-        if (isDuplicate) return old;
-
-        return {
-          ...old,
-          pages: [
-            ...oldPages.slice(0, -1),
-            { ...lastPage, messages: [...lastPage.messages, tempMessage] },
-          ],
-        };
-      }
-    );
-
-    const payload: SendMessagePayload & { tempId: string } = {
-      bookingId,
-      content,
-      senderId: user.id,
-      receiverId: otherUserId!,
-      tempId,
-    };
-
-    sendMessageMutation.mutate(payload);
-    setNewMessage("");
-    setIsScrolledToBottom(true);
-  };
-
   const scrollToBottom = () => {
     messagesContainerRef.current?.scrollTo({
       top: messagesContainerRef.current.scrollHeight,
@@ -435,46 +306,7 @@ const BookingChat = ({
     setIsScrolledToBottom(true);
   };
 
-  const MessageStatusIcon = ({
-    message,
-  }: {
-    message: Message & { delivered?: boolean };
-  }) => {
-    if (message.senderId !== user.id) return null;
-    if (message.read)
-      return (
-        <span className="flex items-center text-xs text-purple-200">
-          <CheckIconSolid className="w-3 h-3 -ml-0.5" />
-          <CheckIconSolid className="w-3 h-3 text-pink-300 -ml-1.5" />
-        </span>
-      );
-    if (message.delivered)
-      return (
-        <span className="flex items-center text-xs text-white/70">
-          <CheckIconSolid className="w-3 h-3 -ml-0.5" />
-          <CheckIconSolid className="w-3 h-3 -ml-1.5" />
-        </span>
-      );
-    return null;
-  };
-
-  const getStatusText = () => {
-    if (isOnlineLoading) return "Loading status...";
-    if (isUserOnline) return "Online";
-    if (!otherUserProfileData?.lastSeen) return "Offline";
-    const lastSeenDate = new Date(otherUserProfileData.lastSeen);
-    const diffMinutes = Math.floor(
-      (Date.now() - lastSeenDate.getTime()) / 60000
-    );
-    if (diffMinutes < 1) return "Online recently";
-    if (diffMinutes < 60)
-      return `Last seen ${diffMinutes} minute${
-        diffMinutes === 1 ? "" : "s"
-      } ago`;
-    if (diffMinutes < 1440)
-      return `Last seen ${Math.floor(diffMinutes / 60)} hour(s) ago`;
-    return `Last seen on ${lastSeenDate.toLocaleDateString()}`;
-  };
+  if (!bookingDetails || !user) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -487,10 +319,10 @@ const BookingChat = ({
         <div className="bg-white/70 backdrop-blur-xl p-6 rounded-t-[3rem] flex items-center justify-between border-b border-gray-200">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative w-16 h-16">
-              {otherUserProfile ? (
+              {otherUserProfileData?.profilePicture ? (
                 <Image
-                  src={otherUserProfile}
-                  alt={otherUserName}
+                  src={otherUserProfileData.profilePicture}
+                  alt={otherUserProfileData?.name ?? "User avatar"}
                   width={64}
                   height={64}
                   className="rounded-full object-cover border-4 border-white shadow-xl"
@@ -509,14 +341,18 @@ const BookingChat = ({
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-purple-800 font-extrabold text-2xl truncate">
-                {otherUserName}
+                {bookingDetails.renterName}
               </span>
               <span
                 className={`text-sm font-medium ${
                   isOtherUserTyping ? "text-pink-600" : "text-gray-600"
                 } italic`}
               >
-                {isOtherUserTyping ? "Typing..." : getStatusText()}
+                {isOtherUserTyping
+                  ? "Typing..."
+                  : isUserOnline
+                  ? "Online"
+                  : "Offline"}
               </span>
             </div>
           </div>
@@ -546,7 +382,7 @@ const BookingChat = ({
                   {msg.sender?.profilePicture ? (
                     <Image
                       src={msg.sender.profilePicture}
-                      alt={msg.sender?.name || "User"}
+                      alt={msg.sender?.name ?? "User"}
                       width={32}
                       height={32}
                       className="object-cover rounded-full"
@@ -566,9 +402,21 @@ const BookingChat = ({
                 >
                   {msg.content}
                 </div>
-                <div className="absolute bottom-0 right-0 translate-x-full -translate-y-1/2">
-                  <MessageStatusIcon message={msg} />
-                </div>
+                {msg.senderId === user.id && (
+                  <div className="absolute bottom-0 right-0 translate-x-full -translate-y-1/2 flex items-center text-xs text-purple-200">
+                    {msg.read ? (
+                      <>
+                        <CheckIconSolid className="w-3 h-3 -ml-0.5" />
+                        <CheckIconSolid className="w-3 h-3 text-pink-300 -ml-1.5" />
+                      </>
+                    ) : msg.delivered ? (
+                      <>
+                        <CheckIconSolid className="w-3 h-3 -ml-0.5" />
+                        <CheckIconSolid className="w-3 h-3 -ml-1.5" />
+                      </>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
           ))}
