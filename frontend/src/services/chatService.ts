@@ -1,5 +1,5 @@
 import socket from "@/lib/socket";
-import { Message } from "@/types";
+import { Message, SendMessagePayload } from "@/types";
 
 // ----------------- TYPES -----------------
 export interface NewMessagePayload extends Message {
@@ -22,7 +22,9 @@ export const joinBookingRoom = (bookingId: string) => {
 };
 
 // ----------------- SOCKET MESSAGES -----------------
-export const sendMessageSocket = (message: Message & { tempId: string }) => {
+export const sendMessageSocket = (
+  message: SendMessagePayload & { tempId?: string }
+) => {
   socket.emit("sendMessage", message);
 };
 

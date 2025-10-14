@@ -2,17 +2,14 @@
 
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  getBookingMessages,
-  joinBookingRoom,
-  sendMessageSocket,
-} from "@/lib/api";
+import { getBookingMessages } from "@/lib/api";
 import { Message, SendMessagePayload, PaginatedMessages } from "@/types";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/app/context/AuthProvider";
 import socket from "@/lib/socket";
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import LoadingScreen from "@/components/LoadingScreen";
+import { joinBookingRoom, sendMessageSocket } from "@/services/chatService";
 
 export default function BookingMessagesPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
@@ -42,7 +39,7 @@ export default function BookingMessagesPage() {
     if (paginatedMessages && paginatedMessages.messages.length > 0) {
       setMessages(paginatedMessages.messages);
     }
-  }, [paginatedMessages]); // Run this effect when paginatedMessages changes
+  }, [paginatedMessages]); 
 
   // Scroll to bottom on new messages
   useEffect(() => {
