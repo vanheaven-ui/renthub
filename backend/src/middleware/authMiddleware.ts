@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "my_fallback_secret";
 
 // Update the AuthRequest interface to include the 'lastSeen' property
@@ -10,8 +9,8 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string;
     email: string;
-    role?: 'ADMIN' | 'OWNER' | 'RENTER';
-    lastSeen?: Date; 
+    role?: "ADMIN" | "OWNER" | "RENTER";
+    lastSeen?: Date;
   };
 }
 
@@ -33,7 +32,7 @@ export const authenticateToken = async (
       userId: string;
       email: string;
     };
-    
+
     req.user = decoded;
 
     // Use a try-catch block for the database update to prevent a failed update from

@@ -1,8 +1,6 @@
-import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { AuthRequest } from '../middleware/authMiddleware';
-
-const prisma = new PrismaClient();
+import { Request, Response } from "express";
+import { AuthRequest } from "../middleware/authMiddleware";
+import { prisma } from "../lib/prisma";
 
 export const createReview = async (req: AuthRequest, res: Response) => {
   try {
@@ -10,11 +8,13 @@ export const createReview = async (req: AuthRequest, res: Response) => {
     const reviewerId = req.user?.userId;
 
     if (!reviewerId) {
-      return res.status(401).json({ message: 'User not authenticated.' });
+      return res.status(401).json({ message: "User not authenticated." });
     }
 
     if (!listingId || !rating || !comment) {
-      return res.status(400).json({ message: 'Please provide a listingId, rating, and comment.' });
+      return res
+        .status(400)
+        .json({ message: "Please provide a listingId, rating, and comment." });
     }
 
     // 1. Check if the user has a completed booking for this listing
@@ -22,13 +22,13 @@ export const createReview = async (req: AuthRequest, res: Response) => {
       where: {
         renterId: reviewerId,
         listingId: listingId,
-        paymentStatus: 'PAID', 
+        paymentStatus: "PAID",
       },
     });
 
     if (!completedBooking) {
       return res.status(403).json({
-        message: 'You can only review listings you have successfully rented.',
+        message: "You can only review listings you have successfully rented.",
       });
     }
 
@@ -42,7 +42,7 @@ export const createReview = async (req: AuthRequest, res: Response) => {
 
     if (existingReview) {
       return res.status(409).json({
-        message: 'You have already reviewed this listing.',
+        message: "You have already reviewed this listing.",
       });
     }
 
@@ -57,12 +57,12 @@ export const createReview = async (req: AuthRequest, res: Response) => {
     });
 
     res.status(201).json({
-      message: 'Review submitted successfully.',
+      message: "Review submitted successfully.",
       review: newReview,
     });
   } catch (error) {
-    console.error('Error creating review:', error);
-    res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error creating review:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
 
@@ -86,7 +86,7 @@ export const getListingReviews = async (req: Request, res: Response) => {
 
     res.status(200).json(reviews);
   } catch (error) {
-    console.error('Error fetching reviews:', error);
-    res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error fetching reviews:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };

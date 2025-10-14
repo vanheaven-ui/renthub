@@ -1,44 +1,47 @@
 import { Request, Response } from "express";
-import { PrismaClient, BookingStatus } from "@prisma/client";
+import { BookingStatus } from "@prisma/client";
 import { supabase, supabaseBucket } from "../config/supabase";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { emitBookingStatusUpdate } from "../lib/socketHelper";
 import { io } from "../socket";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 export const createBooking = async (req: AuthRequest, res: Response) => {
   try {
     const { listingId, startDate, endDate } = req.body;
     const renterId = req.user?.userId;
 
-    if (!renterId) return res.status(401).json({ message: "User not authenticated." });
+    if (!renterId)
+      return res.status(401).json({ message: "User not authenticated." });
     if (!listingId || !startDate || !endDate)
-      return res.status(400).json({ message: "All booking fields are required." });
+      return res
+        .status(400)
+        .json({ message: "All booking fields are required." });
 
     // Parse dates
     const start = new Date(startDate);
     const end = new Date(endDate);
-    if (start >= end) return res.status(400).json({ message: "Invalid booking dates." });
+    if (start >= end)
+      return res.status(400).json({ message: "Invalid booking dates." });
 
     // Fetch listing
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
     });
-    if (!listing) return res.status(404).json({ message: "Listing not found." });
+    if (!listing)
+      return res.status(404).json({ message: "Listing not found." });
 
     // Prevent owner from booking own listing
     if (listing.ownerId === renterId)
-      return res.status(403).json({ message: "You cannot book your own listing." });
+      return res
+        .status(403)
+        .json({ message: "You cannot book your own listing." });
 
     // Check for overlapping bookings for this listing (any user)
     const overlappingBooking = await prisma.booking.findFirst({
       where: {
         listingId,
-        AND: [
-          { startDate: { lte: end } },
-          { endDate: { gte: start } },
-        ],
+        AND: [{ startDate: { lte: end } }, { endDate: { gte: start } }],
         status: { in: ["PENDING", "CONFIRMED"] }, // consider only active bookings
       },
     });
@@ -51,7 +54,9 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
     }
 
     // Calculate total price
-    const dayCount = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    const dayCount = Math.ceil(
+      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    );
     const totalPrice = dayCount * listing.pricePerDay;
 
     // Create booking
@@ -68,7 +73,12 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
       },
       include: {
         listing: {
-          select: { title: true, location: true, pricePerDay: true, images: true },
+          select: {
+            title: true,
+            location: true,
+            pricePerDay: true,
+            images: true,
+          },
         },
       },
     });

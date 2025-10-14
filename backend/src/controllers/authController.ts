@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { prisma } from "../lib/prisma"; 
 import { AuthRequest } from "../middleware/authMiddleware";
 
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || "your_fallback_secret";
 
 export const register = async (req: Request, res: Response) => {
@@ -82,9 +81,7 @@ export const login = async (req: Request, res: Response) => {
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
-      {
-        expiresIn: tokenExpiration,
-      }
+      { expiresIn: tokenExpiration }
     );
 
     const cookieMaxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 3600000;

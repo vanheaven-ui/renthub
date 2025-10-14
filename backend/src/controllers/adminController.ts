@@ -1,7 +1,5 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 export const getAllListings = async (req: Request, res: Response) => {
   try {
@@ -27,7 +25,7 @@ export const updateListingStatus = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    // Validate that the status is a valid enum value
+    // ✅ Validate allowed statuses
     if (!["PENDING", "APPROVED", "SUSPENDED"].includes(status)) {
       return res
         .status(400)
@@ -35,8 +33,8 @@ export const updateListingStatus = async (req: Request, res: Response) => {
     }
 
     const updatedListing = await prisma.listing.update({
-      where: { id: id },
-      data: { status: status },
+      where: { id },
+      data: { status },
     });
 
     res.status(200).json({
@@ -53,9 +51,8 @@ export const deleteListing = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Delete the listing and all its dependent data (bookings, reviews, etc.)
     await prisma.listing.delete({
-      where: { id: id },
+      where: { id },
     });
 
     res.status(200).json({ message: "Listing deleted successfully." });

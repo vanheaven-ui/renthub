@@ -1,15 +1,12 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { AuthRequest } from "../middleware/authMiddleware";
 import Flutterwave from "flutterwave-node-v3";
+import { prisma } from "../lib/prisma";
 
-const prisma = new PrismaClient();
 const flw = new Flutterwave(
   process.env.FLUTTERWAVE_PUBLIC_KEY as string,
   process.env.FLUTTERWAVE_SECRET_KEY as string
 );
-
-// export const initiatePayment = async (req: AuthRequest, res: Response) => {
 //   try {
 //     const { bookingId, phone_number, full_name, email } = req.body;
 //     const userId = req.user?.userId;

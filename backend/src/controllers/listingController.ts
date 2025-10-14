@@ -1,9 +1,7 @@
-import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
+import { Response } from "express";
 import { AuthRequest } from "../middleware/authMiddleware";
 import { supabase, supabaseBucket } from "../config/supabase";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 // Accept Multer files array OR object
 interface CreateListingRequest extends AuthRequest {

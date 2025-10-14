@@ -6,7 +6,12 @@ import { prisma } from "./lib/prisma";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
+// Active users map: userId => set of socketIds
 export const activeUsers = new Map<string, Set<string>>();
+
+// In-memory unread message counts: receiverId => (bookingId => count)
+const unreadCounts = new Map<string, Map<string, number>>();
+
 let io: Server;
 
 export const initSocket = (httpServer: HttpServer) => {
@@ -14,6 +19,7 @@ export const initSocket = (httpServer: HttpServer) => {
     cors: { origin: FRONTEND_URL, methods: ["GET", "POST"], credentials: true },
   });
 
+  // Authentication middleware
   io.use((socket, next) => {
     const cookies = socket.handshake.headers.cookie;
     if (!cookies) return next(new Error("No cookies found"));
@@ -40,22 +46,30 @@ export const initSocket = (httpServer: HttpServer) => {
     const userId = socket.data.userId;
     console.log(`🟢 User connected: ${userId} (${socket.id})`);
 
-    // Add socket to user's active list
+    // Track active sockets
     if (!activeUsers.has(userId)) activeUsers.set(userId, new Set());
     activeUsers.get(userId)!.add(socket.id);
     socket.join(userId);
     io.emit("userOnlineStatus", { userId, isOnline: true });
 
+    // -----------------------------
+    // Socket Event Handlers
+    // -----------------------------
+
     socket.on("joinBookingRoom", (bookingId: string) => {
       socket.join(bookingId);
     });
 
-    socket.on("typing", ({ bookingId, userId }) => {
-      socket.to(bookingId).emit("userTyping", { userId });
-    });
-
-    socket.on("stopTyping", ({ bookingId, userId }) => {
-      socket.to(bookingId).emit("userStoppedTyping", { userId });
+    // Debounced typing events
+    let typingTimeout: NodeJS.Timeout;
+    socket.on("typing", ({ bookingId, userId: typingUserId }) => {
+      socket.to(bookingId).emit("userTyping", { userId: typingUserId });
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        socket
+          .to(bookingId)
+          .emit("userStoppedTyping", { userId: typingUserId });
+      }, 3000);
     });
 
     socket.on(
@@ -74,6 +88,7 @@ export const initSocket = (httpServer: HttpServer) => {
         try {
           const senderId = socket.data.userId;
 
+          // Create message in DB
           const newMessage = await prisma.message.create({
             data: { content, senderId, receiverId, bookingId },
             include: {
@@ -83,24 +98,54 @@ export const initSocket = (httpServer: HttpServer) => {
             },
           });
 
+          // Emit message to booking room
           io.to(bookingId).emit("newMessage", { ...newMessage, tempId });
 
-          // Update unread count for receiver
+          // -----------------------------
+          // Update in-memory unread counter
+          // -----------------------------
           if (receiverId !== senderId) {
-            const unreadCount = await prisma.message.count({
-              where: { bookingId, receiverId, read: false },
-            });
+            if (!unreadCounts.has(receiverId))
+              unreadCounts.set(receiverId, new Map());
+            const bookingCounts = unreadCounts.get(receiverId)!;
+            bookingCounts.set(
+              bookingId,
+              (bookingCounts.get(bookingId) ?? 0) + 1
+            );
 
             io.to(receiverId).emit("updateUnreadCount", {
               bookingId,
-              count: unreadCount,
+              count: bookingCounts.get(bookingId),
             });
           }
         } catch (err) {
           console.error("❌ Error sending message:", err);
+          socket.emit("sendMessageError", { error: "Failed to send message" });
         }
       }
     );
+
+    socket.on("markMessagesAsRead", async ({ bookingId }) => {
+      const receiverId = socket.data.userId;
+
+      try {
+        // Reset in-memory counter
+        if (unreadCounts.has(receiverId)) {
+          const bookingCounts = unreadCounts.get(receiverId)!;
+          bookingCounts.set(bookingId, 0);
+        }
+
+        // Optionally update DB in background
+        await prisma.message.updateMany({
+          where: { bookingId, receiverId, read: false },
+          data: { read: true, readAt: new Date() },
+        });
+
+        io.to(receiverId).emit("updateUnreadCount", { bookingId, count: 0 });
+      } catch (err) {
+        console.error("❌ Error marking messages as read:", err);
+      }
+    });
 
     socket.on("disconnect", () => {
       const userSockets = activeUsers.get(userId);

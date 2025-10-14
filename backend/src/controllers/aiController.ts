@@ -1,9 +1,8 @@
 import { Request, Response } from "express";
 import { GoogleGenAI } from "@google/genai";
-import { PrismaClient } from "@prisma/client"; // Added Prisma client
+import { prisma } from "../lib/prisma"; 
 
 const ai = new GoogleGenAI({});
-const prisma = new PrismaClient(); // Initialize Prisma
 
 // -----------------------------
 // Helper Function: Call Gemini API (Modified)
@@ -49,7 +48,7 @@ async function getUgandaRentalExpertResponse(
       model: "gemini-2.5-flash",
       contents: fullQuery,
       config: {
-        systemInstruction: systemInstruction,
+        systemInstruction,
         temperature: 0.6,
       },
     });
@@ -75,7 +74,7 @@ export const askUgandaRentalExpert = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "A valid question is required." });
   }
 
-  let context = undefined;
+  let context: string | undefined;
 
   // **NEW P2P LOGIC:** Fetch specific listing details if provided
   if (listingId) {
@@ -92,7 +91,6 @@ export const askUgandaRentalExpert = async (req: Request, res: Response) => {
       });
 
       if (listing) {
-        // Format the listing data into a clear string for the AI's system prompt
         context = `Listing ID: ${listingId}, Title: ${listing.title}, Location: ${listing.location}, Price: ${listing.pricePerDay} UGX, Description: ${listing.description}, Rules: ${listing.rules}`;
       }
     } catch (dbError) {
@@ -100,7 +98,7 @@ export const askUgandaRentalExpert = async (req: Request, res: Response) => {
         "Could not fetch listing context. Proceeding without context.",
         dbError
       );
-      // Non-fatal: just continue without the context
+      // Non-fatal: continue without context
     }
   }
 
@@ -109,10 +107,10 @@ export const askUgandaRentalExpert = async (req: Request, res: Response) => {
 
     res.status(200).json({
       success: true,
-      question: question,
+      question,
       answer: aiResponse,
       source: "Uganda Rental Business Expert AI (Gemini 2.5 Flash)",
-      contextUsed: !!context, // Report if context was used
+      contextUsed: !!context,
     });
   } catch (error) {
     const errorMessage =
@@ -127,12 +125,10 @@ export const askUgandaRentalExpert = async (req: Request, res: Response) => {
 // -----------------------------------------------
 // NEW AI HELPER: AI-Powered Listing Description
 // -----------------------------------------------
-// A unique feature for a P2P app: generating professional descriptions
 export const generateListingDescription = async (
   req: Request,
   res: Response
 ) => {
-  // Expected Request Body: { basicDetails: string }
   const { basicDetails } = req.body;
 
   if (!basicDetails) {

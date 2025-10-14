@@ -1,8 +1,6 @@
 import { Request, Response } from "express";
-import { PrismaClient } from "@prisma/client";
 import { activeUsers, io } from "../socket";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 // -----------------------------
 // Types
