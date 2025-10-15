@@ -185,6 +185,7 @@ export interface PaymentResponse {
 export interface OnlineStatus {
   userId: string;
   isOnline: boolean;
+  lastSeen?: string;
 }
 
 export interface UnreadCount {
@@ -213,4 +214,8 @@ export interface GenerateDescriptionPayload {
 export interface GenerateDescriptionResponse {
   success: boolean;
   generatedDescription: string;
+}
+
+export interface MessageWithDelivered extends Message {
+  delivered?: boolean;
 }

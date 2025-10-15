@@ -15,6 +15,7 @@ import {
   PaginatedMessages,
   OnlineStatus,
   SendMessagePayload,
+  MessageWithDelivered,
 } from "@/types";
 import {
   XMarkIcon,
@@ -33,16 +34,12 @@ import {
 } from "@/lib/api";
 import Image from "next/image";
 import DefaultProfileIcon from "@/components/DefaultProfileIcon";
+import { formatDateGroup, groupMessagesByDate } from "@/lib/dateUtil";
 
 interface BookingChatProps {
   bookingId: string;
   onClose: () => void;
   bookingDetails: BookingDetails | null;
-}
-
-// Extend Message to optionally include delivered
-export interface MessageWithDelivered extends Message {
-  delivered?: boolean;
 }
 
 const BookingChat = ({
@@ -53,16 +50,16 @@ const BookingChat = ({
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastTypingEmit = useRef<number>(0);
 
-  const [newMessage, setNewMessage] = useState<string>("");
-  const [isOtherUserTyping, setIsOtherUserTyping] = useState<boolean>(false);
-  const [isUserOnline, setIsUserOnline] = useState<boolean>(false);
-  const [isScrolledToBottom, setIsScrolledToBottom] = useState<boolean>(true);
+  const [newMessage, setNewMessage] = useState("");
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [isUserOnline, setIsUserOnline] = useState(false);
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
+  const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
+  // Determine the "other" participant (renter vs owner)
   const otherUserId =
     user && bookingDetails
       ? user.id === bookingDetails.ownerId
@@ -74,60 +71,52 @@ const BookingChat = ({
 
   // -------------------- FETCH MESSAGES --------------------
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteQuery<
-      PaginatedMessages,
-      Error, 
-      InfiniteData<PaginatedMessages>, 
-      ["bookingMessages", string],
-      number
-    >({
+    useInfiniteQuery<PaginatedMessages, Error>({
       queryKey: ["bookingMessages", bookingId],
       queryFn: async ({ pageParam = 1 }) =>
-        getBookingMessages(bookingId, pageParam),
+        getBookingMessages(bookingId, pageParam as number),
       getNextPageParam: (lastPage) =>
         lastPage.hasMore ? lastPage.nextPage : undefined,
       initialPageParam: 1,
       enabled: isReady,
+      staleTime: Infinity, // Prevent re-fetching
     });
 
-  // Flatten messages safely
   const messages: MessageWithDelivered[] =
     data?.pages.flatMap((page) => page.messages) ?? [];
+  const groupedMessages = groupMessagesByDate(messages);
 
   // -------------------- MARK AS READ --------------------
   const markReadMutation = useMutation({
     mutationFn: () => markMessagesAsRead(bookingId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["bookingMessages", bookingId],
-      });
-      queryClient.invalidateQueries({ queryKey: ["unreadMessagesBatch"] });
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["unreadMessagesBatch"] }),
   });
 
   useEffect(() => {
     if (isReady) markReadMutation.mutate();
-  }, [bookingId, markReadMutation, isReady]);
+  }, [bookingId, isReady]);
 
   // -------------------- SEND MESSAGE --------------------
   const sendMessageMutation = useMutation({
     mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
       sendMessageHttp(payload),
-    onError: (error, variables) => {
+    onError: (_, variables) => {
+      // Remove failed temp message
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
-        (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              messages: page.messages.filter(
-                (msg) => msg.id !== variables.tempId
-              ),
-            })),
-          };
-        }
+        (old) =>
+          old
+            ? {
+                ...old,
+                pages: old.pages.map((page) => ({
+                  ...page,
+                  messages: page.messages.filter(
+                    (msg) => msg.id !== variables.tempId
+                  ),
+                })),
+              }
+            : old
       );
     },
   });
@@ -148,43 +137,60 @@ const BookingChat = ({
   });
 
   useEffect(() => {
-    if (initialOnlineStatusData)
-      setIsUserOnline(initialOnlineStatusData.isOnline);
+    if (!initialOnlineStatusData) return;
+    const { isOnline, lastSeen } = initialOnlineStatusData;
+    setIsUserOnline(isOnline);
+    setLastSeen(
+      !isOnline && lastSeen
+        ? new Date(lastSeen).toLocaleString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+            month: "short",
+            day: "numeric",
+          })
+        : null
+    );
   }, [initialOnlineStatusData]);
 
-  // -------------------- SOCKET EVENTS --------------------
+  // -------------------- SOCKET CONNECTION --------------------
   useEffect(() => {
     if (!isReady) return;
 
+    chatService.connectSocket();
     chatService.joinBookingRoom(bookingId);
 
-    const offNewMessage = chatService.onNewMessage(
-      (message: MessageWithDelivered) => {
-        queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-          ["bookingMessages", bookingId],
-          (old) => {
-            if (!old) return old;
-            const lastPage = old.pages[old.pages.length - 1];
-            if (!lastPage) return old;
+    const offNewMessage = chatService.onNewMessage((message) => {
+      queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+        ["bookingMessages", bookingId],
+        (old) => {
+          if (!old) return old;
+          const lastPage = old.pages[old.pages.length - 1];
+          if (!lastPage) return old;
 
-            const isDuplicate = old.pages.some((p) =>
-              p.messages.some((m) => m.id === message.id)
-            );
-            if (isDuplicate) return old;
+          // Avoid duplicates
+          const isDuplicate = old.pages.some((p) =>
+            p.messages.some((m) => m.id === message.id)
+          );
+          if (isDuplicate) return old;
 
-            if (message.senderId !== user.id) markReadMutation.mutate();
+          if (message.senderId !== user?.id) markReadMutation.mutate();
 
-            return {
-              ...old,
-              pages: [
-                ...old.pages.slice(0, -1),
-                { ...lastPage, messages: [...lastPage.messages, message] },
-              ],
-            };
+          const updated = {
+            ...old,
+            pages: [
+              ...old.pages.slice(0, -1),
+              { ...lastPage, messages: [...lastPage.messages, message] },
+            ],
+          };
+
+          if (isScrolledToBottom) {
+            setTimeout(() => scrollToBottom(), 100);
           }
-        );
-      }
-    );
+          return updated;
+        }
+      );
+    });
 
     const offTyping = chatService.onUserTyping(() =>
       setIsOtherUserTyping(true)
@@ -192,8 +198,22 @@ const BookingChat = ({
     const offStopTyping = chatService.onUserStopTyping(() =>
       setIsOtherUserTyping(false)
     );
+
     const offOnline = chatService.onUserOnlineStatus((data) => {
-      if (data.userId === otherUserId) setIsUserOnline(data.isOnline);
+      if (data.userId === otherUserId) {
+        setIsUserOnline(data.isOnline);
+        setLastSeen(
+          !data.isOnline && data.lastSeen
+            ? new Date(data.lastSeen).toLocaleString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+                month: "short",
+                day: "numeric",
+              })
+            : null
+        );
+      }
     });
 
     return () => {
@@ -201,25 +221,22 @@ const BookingChat = ({
       offTyping();
       offStopTyping();
       offOnline();
+      chatService.leaveBookingRoom(bookingId);
+      chatService.disconnectSocket();
     };
-  }, [bookingId, queryClient, user, otherUserId, markReadMutation, isReady]);
+  }, [bookingId, isReady, otherUserId, user?.id, isScrolledToBottom]);
 
   // -------------------- INPUT HANDLERS --------------------
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
-    const now = Date.now();
-
-    if (now - lastTypingEmit.current > 500) {
-      chatService.emitTyping({ bookingId, userId: user!.id });
-      lastTypingEmit.current = now;
-    }
+    if (!user) return;
+    chatService.emitTyping({ bookingId, userId: user.id });
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      chatService.emitStopTyping({ bookingId, userId: user!.id });
+      chatService.emitStopTyping({ bookingId, userId: user.id });
       typingTimeoutRef.current = null;
-      lastTypingEmit.current = 0;
-    }, 1200);
+    }, 1500);
   };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -248,22 +265,30 @@ const BookingChat = ({
       delivered: false,
     };
 
+    // Optimistic UI
     queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
       ["bookingMessages", bookingId],
-      (old) => {
-        if (!old) return old;
-        const lastPage = old.pages[old.pages.length - 1];
-        if (!lastPage) return old;
-        return {
-          ...old,
-          pages: [
-            ...old.pages.slice(0, -1),
-            { ...lastPage, messages: [...lastPage.messages, tempMessage] },
-          ],
-        };
-      }
+      (old) =>
+        old
+          ? {
+              ...old,
+              pages: old.pages.map((page, i, arr) =>
+                i === arr.length - 1
+                  ? { ...page, messages: [...page.messages, tempMessage] }
+                  : page
+              ),
+            }
+          : old
     );
 
+    // Emit + HTTP persist
+    chatService.sendMessageSocket({
+      bookingId,
+      content,
+      senderId: user.id,
+      receiverId: otherUserId,
+      tempId,
+    });
     sendMessageMutation.mutate({
       bookingId,
       content,
@@ -274,25 +299,25 @@ const BookingChat = ({
 
     setNewMessage("");
     setIsScrolledToBottom(true);
+    setTimeout(() => scrollToBottom(), 50);
   };
 
-  // -------------------- SCROLL HANDLER --------------------
+  // -------------------- SCROLL --------------------
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     const isAtBottom =
       container.scrollHeight - container.scrollTop <=
-      container.clientHeight + 1;
+      container.clientHeight + 20;
     setIsScrolledToBottom(isAtBottom);
 
     if (container.scrollTop < 50 && hasNextPage && !isFetchingNextPage) {
-      const oldScrollHeight = container.scrollHeight;
+      const oldHeight = container.scrollHeight;
       fetchNextPage().then(() => {
         if (messagesContainerRef.current) {
-          const newScrollHeight = messagesContainerRef.current.scrollHeight;
-          messagesContainerRef.current.scrollTop =
-            newScrollHeight - oldScrollHeight;
+          const newHeight = messagesContainerRef.current.scrollHeight;
+          messagesContainerRef.current.scrollTop = newHeight - oldHeight;
         }
       });
     }
@@ -308,6 +333,16 @@ const BookingChat = ({
 
   if (!bookingDetails || !user) return null;
 
+  // -------------------- DERIVED DISPLAY INFO --------------------
+  const otherUserName =
+    otherUserProfileData?.name ??
+    (user.id === bookingDetails.ownerId
+      ? bookingDetails.renterName
+      : bookingDetails.ownerName);
+
+  const otherUserAvatar = otherUserProfileData?.profilePicture;
+
+  // -------------------- JSX --------------------
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -319,10 +354,10 @@ const BookingChat = ({
         <div className="bg-white/70 backdrop-blur-xl p-6 rounded-t-[3rem] flex items-center justify-between border-b border-gray-200">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative w-16 h-16">
-              {otherUserProfileData?.profilePicture ? (
+              {otherUserAvatar ? (
                 <Image
-                  src={otherUserProfileData.profilePicture}
-                  alt={otherUserProfileData?.name ?? "User avatar"}
+                  src={otherUserAvatar}
+                  alt={otherUserName ?? "User avatar"}
                   width={64}
                   height={64}
                   className="rounded-full object-cover border-4 border-white shadow-xl"
@@ -336,12 +371,18 @@ const BookingChat = ({
                     ? "bg-green-500 animate-ping-once"
                     : "bg-gray-400"
                 }`}
-                title={isUserOnline ? "Online" : "Offline"}
+                title={
+                  isUserOnline
+                    ? "Online"
+                    : lastSeen
+                    ? `Last seen ${lastSeen}`
+                    : "Offline"
+                }
               />
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-purple-800 font-extrabold text-2xl truncate">
-                {bookingDetails.renterName}
+                {otherUserName}
               </span>
               <span
                 className={`text-sm font-medium ${
@@ -352,6 +393,8 @@ const BookingChat = ({
                   ? "Typing..."
                   : isUserOnline
                   ? "Online"
+                  : lastSeen
+                  ? `Last seen ${lastSeen}`
                   : "Offline"}
               </span>
             </div>
@@ -370,57 +413,73 @@ const BookingChat = ({
           onScroll={handleScroll}
           className="relative flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3"
         >
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex items-end gap-2 ${
-                msg.senderId === user.id ? "justify-end" : "justify-start"
-              }`}
-            >
-              {msg.senderId !== user.id && (
-                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mb-1">
-                  {msg.sender?.profilePicture ? (
-                    <Image
-                      src={msg.sender.profilePicture}
-                      alt={msg.sender?.name ?? "User"}
-                      width={32}
-                      height={32}
-                      className="object-cover rounded-full"
-                    />
-                  ) : (
-                    <DefaultProfileIcon size={32} />
-                  )}
+          {Object.entries(groupedMessages).map(([date, msgs]) => (
+            <div key={date} className="relative flex flex-col gap-2">
+              {/* Date Separator */}
+              <div className="flex justify-center my-2">
+                <div className="relative inline-block px-4 py-1 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-500 text-white font-semibold rounded-full shadow-lg">
+                  {formatDateGroup(date)}
                 </div>
-              )}
-              <div className="relative max-w-[70%]">
-                <div
-                  className={`px-4 py-2 rounded-2xl break-words ${
-                    msg.senderId === user.id
-                      ? "bg-purple-700 text-white"
-                      : "bg-white text-gray-900 shadow"
-                  } text-sm`}
-                >
-                  {msg.content}
-                </div>
-                {msg.senderId === user.id && (
-                  <div className="absolute bottom-0 right-0 translate-x-full -translate-y-1/2 flex items-center text-xs text-purple-200">
-                    {msg.read ? (
-                      <>
-                        <CheckIconSolid className="w-3 h-3 -ml-0.5" />
-                        <CheckIconSolid className="w-3 h-3 text-pink-300 -ml-1.5" />
-                      </>
-                    ) : msg.delivered ? (
-                      <>
-                        <CheckIconSolid className="w-3 h-3 -ml-0.5" />
-                        <CheckIconSolid className="w-3 h-3 -ml-1.5" />
-                      </>
-                    ) : null}
-                  </div>
-                )}
               </div>
+              {msgs.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex items-end gap-2 ${
+                    msg.senderId === user.id ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  {msg.senderId !== user.id && (
+                    <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 mb-1">
+                      {msg.sender?.profilePicture ? (
+                        <Image
+                          src={msg.sender.profilePicture}
+                          alt={msg.sender?.name ?? "User"}
+                          width={32}
+                          height={32}
+                          className="object-cover rounded-full"
+                        />
+                      ) : (
+                        <DefaultProfileIcon size={32} />
+                      )}
+                    </div>
+                  )}
+                  <div className="relative max-w-[70%]">
+                    <div
+                      className={`px-4 py-2 rounded-2xl break-words ${
+                        msg.senderId === user.id
+                          ? "bg-purple-700 text-white"
+                          : "bg-white text-gray-900 shadow"
+                      } text-sm`}
+                    >
+                      {msg.content}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {new Date(msg.createdAt).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                      })}
+                    </div>
+                    {msg.senderId === user.id && (
+                      <div className="absolute bottom-0 right-0 translate-x-full -translate-y-1/2 flex items-center text-xs text-purple-200">
+                        {msg.read ? (
+                          <>
+                            <CheckIconSolid className="w-3 h-3 -ml-0.5" />
+                            <CheckIconSolid className="w-3 h-3 text-pink-300 -ml-1.5" />
+                          </>
+                        ) : msg.delivered ? (
+                          <>
+                            <CheckIconSolid className="w-3 h-3 -ml-0.5" />
+                            <CheckIconSolid className="w-3 h-3 -ml-1.5" />
+                          </>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}

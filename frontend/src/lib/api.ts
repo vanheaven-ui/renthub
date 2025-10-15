@@ -140,9 +140,7 @@ export const createListing = async (formData: FormData): Promise<Listing> => {
   const { data } = await api.post<{ data: Listing }>(
     "/api/listings",
     formData,
-    {
-      headers: { "Content-Type": "multipart/form-data" },
-    }
+    { headers: { "Content-Type": "multipart/form-data" } }
   );
   return data.data;
 };
@@ -154,9 +152,7 @@ export const updateListing = async (
   const { data } = await api.patch<{ data: Listing }>(
     `/api/listings/${id}`,
     formData,
-    {
-      headers: { "Content-Type": "multipart/form-data" },
-    }
+    { headers: { "Content-Type": "multipart/form-data" } }
   );
   return data.data;
 };
@@ -229,7 +225,7 @@ export const initiatePayment = async (
   return data;
 };
 
-// ----------------- User -----------------
+// ----------------- Users -----------------
 export const getUserProfile = async (userId: string): Promise<User> => {
   const res: AxiosResponse<ApiResponse<User>> = await api.get(
     `/api/users/${userId}`
@@ -246,7 +242,7 @@ export const getUserOnlineStatus = async (
   return res.data;
 };
 
-// ----------------- Messaging HTTP -----------------
+// ----------------- Messaging -----------------
 export const getBookingMessages = async (
   bookingId: string,
   page = 1,
@@ -259,33 +255,43 @@ export const getBookingMessages = async (
   return res.data;
 };
 
-export const markMessagesAsRead = async (bookingId: string): Promise<void> => {
-  await api.patch(`/api/bookings/${bookingId}/messages/read`);
-};
-
 export const sendMessageHttp = async (
   payload: SendMessagePayload & { tempId: string }
-): Promise<Message & { tempId: string }> => {
-  const res: AxiosResponse<Message & { tempId: string }> = await api.post(
-    `/api/bookings/${payload.bookingId}/messages`,
-    payload
-  );
+): Promise<{ success: boolean; tempId: string }> => {
+  const res: AxiosResponse<{ success: boolean; tempId: string }> =
+    await api.post(`/api/bookings/${payload.bookingId}/messages`, payload);
+  return res.data;
+};
+
+export const getUnreadMessages = async (
+  bookingId: string
+): Promise<{ bookingId: string; unreadCount: number }> => {
+  const res: AxiosResponse<{ bookingId: string; unreadCount: number }> =
+    await api.get(`/api/bookings/${bookingId}/messages/unread`);
   return res.data;
 };
 
 export const getUnreadMessagesBatch = async (
   bookingIds: string[]
 ): Promise<UnreadCount[]> => {
-  const res = await axios.post<{ data: UnreadCount[] }>(
-    `${API_BASE}/api/bookings/unread/batch`,
+  const res: AxiosResponse<UnreadCount[]> = await api.post(
+    `/api/bookings/unread/batch`,
     { bookingIds },
     { withCredentials: true }
   );
-
-  return res.data.data;
+  return res.data;
 };
 
-// ----------------- AI -----------------
+export const markMessagesAsRead = async (
+  bookingId: string
+): Promise<{ success: boolean }> => {
+  const res: AxiosResponse<{ success: boolean }> = await api.patch(
+    `/api/bookings/${bookingId}/messages/read`
+  );
+  return res.data;
+};
+
+// ----------------- AI / Generative -----------------
 export const askUgandaRentalExpert = async (
   payload: AskExpertPayload
 ): Promise<AskExpertResponse> => {

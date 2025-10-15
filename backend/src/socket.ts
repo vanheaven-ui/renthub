@@ -6,156 +6,181 @@ import { prisma } from "./lib/prisma";
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-// Active users map: userId => set of socketIds
+// --- Active users: userId => set of socketIds
 export const activeUsers = new Map<string, Set<string>>();
 
-// In-memory unread message counts: receiverId => (bookingId => count)
-const unreadCounts = new Map<string, Map<string, number>>();
+// --- Unread counts cache: userId => (bookingId => count)
+export const unreadCounts = new Map<string, Map<string, number>>();
+
+// --- Last seen: userId => ISO string
+export const lastSeen = new Map<string, string>();
 
 let io: Server;
+
+interface TypingEvent {
+  bookingId: string;
+}
+
+interface SendMessageEvent {
+  bookingId: string;
+  receiverId: string;
+  content: string;
+  tempId?: string;
+}
 
 export const initSocket = (httpServer: HttpServer) => {
   io = new Server(httpServer, {
     cors: { origin: FRONTEND_URL, methods: ["GET", "POST"], credentials: true },
   });
 
-  // Authentication middleware
+  // --- Authentication middleware
   io.use((socket, next) => {
-    const cookies = socket.handshake.headers.cookie;
-    if (!cookies) return next(new Error("No cookies found"));
-
-    const cookieParser = require("cookie-parser")();
-    const req = { headers: { cookie: cookies } } as any;
-    const res = { getHeader: () => {}, setHeader: () => {} } as any;
-
-    cookieParser(req, res, () => {
-      const token = req.signedCookies?.token || req.cookies?.token;
-      if (!token) return next(new Error("Authentication error: No token"));
-
-      try {
-        const decoded: any = jwt.verify(token, JWT_SECRET);
-        socket.data.userId = decoded.userId;
-        next();
-      } catch {
-        next(new Error("Authentication error: Invalid token"));
-      }
-    });
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("Authentication error: No token"));
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      socket.data.userId = decoded.userId;
+      next();
+    } catch {
+      next(new Error("Authentication error: Invalid token"));
+    }
   });
 
   io.on("connection", (socket) => {
-    const userId = socket.data.userId;
+    const userId: string = socket.data.userId;
     console.log(`🟢 User connected: ${userId} (${socket.id})`);
 
-    // Track active sockets
+    // --- Track active sockets
     if (!activeUsers.has(userId)) activeUsers.set(userId, new Set());
     activeUsers.get(userId)!.add(socket.id);
     socket.join(userId);
     io.emit("userOnlineStatus", { userId, isOnline: true });
 
-    // -----------------------------
-    // Socket Event Handlers
-    // -----------------------------
+    // --- Typing timeouts per user per booking
+    const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
-    socket.on("joinBookingRoom", (bookingId: string) => {
-      socket.join(bookingId);
-    });
-
-    // Debounced typing events
-    let typingTimeout: NodeJS.Timeout;
-    socket.on("typing", ({ bookingId, userId: typingUserId }) => {
-      socket.to(bookingId).emit("userTyping", { userId: typingUserId });
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        socket
-          .to(bookingId)
-          .emit("userStoppedTyping", { userId: typingUserId });
+    socket.on("typing", ({ bookingId }: TypingEvent) => {
+      socket.to(bookingId).emit("userTyping", { userId });
+      clearTimeout(typingTimeouts.get(bookingId));
+      const timeout = setTimeout(() => {
+        socket.to(bookingId).emit("userStoppedTyping", { userId });
+        typingTimeouts.delete(bookingId);
       }, 3000);
+      typingTimeouts.set(bookingId, timeout);
     });
 
+    // --- Send message (socket)
     socket.on(
       "sendMessage",
-      async ({
-        bookingId,
-        receiverId,
-        content,
-        tempId,
-      }: {
-        bookingId: string;
-        receiverId: string;
-        content: string;
-        tempId?: string;
-      }) => {
-        try {
-          const senderId = socket.data.userId;
+      async ({ bookingId, receiverId, content, tempId }: SendMessageEvent) => {
+        const senderId = userId;
 
-          // Create message in DB
-          const newMessage = await prisma.message.create({
-            data: { content, senderId, receiverId, bookingId },
+        // --- Rate limiting: 5 messages per second per socket
+        const RATE_LIMIT = 5;
+        if (!socket.data.lastMessages) socket.data.lastMessages = [];
+        const now = Date.now();
+        socket.data.lastMessages = socket.data.lastMessages.filter(
+          (ts: number) => now - ts < 1000
+        );
+        if (socket.data.lastMessages.length >= RATE_LIMIT) {
+          return socket.emit("sendMessageError", {
+            error: "Rate limit exceeded",
+          });
+        }
+        socket.data.lastMessages.push(now);
+
+        // --- Emit temp message immediately
+        const tempMessage = {
+          id: tempId || `temp-${Date.now()}`,
+          bookingId,
+          senderId,
+          receiverId,
+          content,
+          createdAt: new Date(),
+          read: false,
+          temp: true,
+        };
+        io.to(bookingId).emit("newMessage", tempMessage);
+
+        // --- Async DB write
+        try {
+          const savedMessage = await prisma.message.create({
+            data: { bookingId, senderId, receiverId, content },
             include: {
               sender: {
+                select: { id: true, name: true, profilePicture: true },
+              },
+              receiver: {
                 select: { id: true, name: true, profilePicture: true },
               },
             },
           });
 
-          // Emit message to booking room
-          io.to(bookingId).emit("newMessage", { ...newMessage, tempId });
+          // Replace temp message with saved message
+          io.to(bookingId).emit("replaceTempMessage", {
+            tempId,
+            message: savedMessage,
+          });
 
-          // -----------------------------
-          // Update in-memory unread counter
-          // -----------------------------
+          // --- Update unread counts
           if (receiverId !== senderId) {
             if (!unreadCounts.has(receiverId))
               unreadCounts.set(receiverId, new Map());
-            const bookingCounts = unreadCounts.get(receiverId)!;
-            bookingCounts.set(
-              bookingId,
-              (bookingCounts.get(bookingId) ?? 0) + 1
-            );
-
-            io.to(receiverId).emit("updateUnreadCount", {
-              bookingId,
-              count: bookingCounts.get(bookingId),
-            });
+            const bookingMap = unreadCounts.get(receiverId)!;
+            const count = (bookingMap.get(bookingId) ?? 0) + 1;
+            bookingMap.set(bookingId, count);
+            io.to(receiverId).emit("updateUnreadCount", { bookingId, count });
           }
+
+          // --- Update last seen for sender
+          lastSeen.set(senderId, new Date().toISOString());
         } catch (err) {
-          console.error("❌ Error sending message:", err);
+          console.error("❌ Socket sendMessage DB error:", err);
           socket.emit("sendMessageError", { error: "Failed to send message" });
         }
       }
     );
 
-    socket.on("markMessagesAsRead", async ({ bookingId }) => {
-      const receiverId = socket.data.userId;
+    // --- Mark messages as read
+    socket.on(
+      "markMessagesAsRead",
+      async ({ bookingId }: { bookingId: string }) => {
+        const receiverId = userId;
 
-      try {
-        // Reset in-memory counter
-        if (unreadCounts.has(receiverId)) {
-          const bookingCounts = unreadCounts.get(receiverId)!;
-          bookingCounts.set(bookingId, 0);
-        }
-
-        // Optionally update DB in background
-        await prisma.message.updateMany({
-          where: { bookingId, receiverId, read: false },
-          data: { read: true, readAt: new Date() },
-        });
-
+        // Reset in-memory count
+        unreadCounts.get(receiverId)?.set(bookingId, 0);
         io.to(receiverId).emit("updateUnreadCount", { bookingId, count: 0 });
-      } catch (err) {
-        console.error("❌ Error marking messages as read:", err);
-      }
-    });
 
+        // Async DB update
+        prisma.message
+          .updateMany({
+            where: { bookingId, receiverId, read: false },
+            data: { read: true, readAt: new Date() },
+          })
+          .catch((err) =>
+            console.error("❌ markMessagesAsRead DB error:", err)
+          );
+
+        // Update last seen
+        lastSeen.set(receiverId, new Date().toISOString());
+      }
+    );
+
+    // --- Join booking room
+    socket.on("joinBookingRoom", (bookingId: string) => socket.join(bookingId));
+
+    // --- Disconnect
     socket.on("disconnect", () => {
-      const userSockets = activeUsers.get(userId);
-      if (userSockets) {
-        userSockets.delete(socket.id);
-        if (userSockets.size === 0) {
+      const sockets = activeUsers.get(userId);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
           activeUsers.delete(userId);
           io.emit("userOnlineStatus", { userId, isOnline: false });
+          lastSeen.set(userId, new Date().toISOString());
         }
       }
+      typingTimeouts.forEach((timeout) => clearTimeout(timeout));
     });
   });
 
