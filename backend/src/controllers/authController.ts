@@ -93,7 +93,7 @@ export const login = async (req: Request, res: Response) => {
       maxAge: cookieMaxAge,
     });
 
-    res.status(200).json({ message: "Login successful" });
+    res.status(200).json({ message: "Login successful", token });
   } catch (error) {
     console.error("Error during login:", error);
     res.status(500).json({ message: "Internal server error" });

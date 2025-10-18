@@ -12,8 +12,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/AuthProvider";
 import BookingCard from "@/components/BookingCard";
 import BookingChat from "@/components/BookingChat";
-import socket from "@/lib/socket";
 import LoadingScreen from "@/components/LoadingScreen";
+import { socket, connectSocket, disconnectSocket } from "@/lib/socket";
 
 const MyBookingsPage = () => {
   const { user } = useAuth();
@@ -21,7 +21,6 @@ const MyBookingsPage = () => {
   const queryClient = useQueryClient();
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [modalBooking, setModalBooking] = useState<Booking | null>(null);
-  // Removed unused state: const [typingUsers, setTypingUsers] = useState<Record<string, string[]>>({});
 
   // --- Fetch bookings ---
   const { data: bookings, isLoading } = useQuery<Booking[]>({
@@ -30,7 +29,7 @@ const MyBookingsPage = () => {
     enabled: !!user,
   });
 
-  // FIX: Wrap dynamic dependency 'bookingIds' in useMemo
+  // Memoize booking IDs
   const bookingIds = useMemo(
     () => bookings?.map((b) => b.id) ?? [],
     [bookings]
@@ -87,35 +86,38 @@ const MyBookingsPage = () => {
     queryClient.invalidateQueries({ queryKey: ["myBookings", user.id] });
   }, [queryClient, user]);
 
-  // Removed unused socket handlers: handleUserTyping and handleUserStoppedTyping
-
-  // --- Socket listeners ---
+  // --- Socket connection & listeners ---
   useEffect(() => {
-    if (!user || bookingIds.length === 0) return;
+    if (!user) return;
 
-    bookingIds.forEach((id) => socket.emit("joinBookingRoom", id));
+    // Connect using cookies
+    connectSocket();
+
+    // Once connected, join all rooms
+    socket.on("connect", () => {
+      console.log("[SOCKET] Connected via cookies!");
+      bookingIds.forEach((id) => {
+        socket.emit("joinBookingRoom", id);
+        console.log(`[SOCKET] Joined booking room: ${id}`);
+      });
+    });
 
     socket.on("updateUnreadCount", handleUnreadUpdate);
     socket.on("bookingStatusUpdated", handleStatusUpdate);
     socket.on("newBooking", handleNewBooking);
 
-    // Removed unused listeners for typing
-    // socket.on("userTyping", handleUserTyping);
-    // socket.on("userStoppedTyping", handleUserStoppedTyping);
-
     return () => {
       socket.off("updateUnreadCount", handleUnreadUpdate);
       socket.off("bookingStatusUpdated", handleStatusUpdate);
       socket.off("newBooking", handleNewBooking);
-      // socket.off("userTyping", handleUserTyping);
-      // socket.off("userStoppedTyping", handleUserStoppedTyping);
+      disconnectSocket();
     };
   }, [
+    user,
     bookingIds,
     handleUnreadUpdate,
     handleStatusUpdate,
     handleNewBooking,
-    user,
   ]);
 
   const openChat = (bookingId: string) => {

@@ -26,6 +26,7 @@ export interface User {
   id: string;
   name?: string | null;
   email: string;
+  token?: string;
   profilePicture?: string | null;
   role?: "RENTER" | "OWNER" | "ADMIN";
   lastSeen?: string | null; // ISO string

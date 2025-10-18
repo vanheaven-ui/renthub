@@ -1,4 +1,4 @@
-import socket from "@/lib/socket";
+import { socket, connectSocket, disconnectSocket } from "@/lib/socket";
 import { Message, SendMessagePayload, UnreadCount } from "@/types";
 
 // ----------------- TYPES -----------------
@@ -17,54 +17,83 @@ interface UserOnlineStatusPayload {
   lastSeen?: string;
 }
 
-// Track joined rooms to avoid duplicate joins
+// ----------------- STATE -----------------
 const joinedRooms = new Set<string>();
 
-// ----------------- CONNECTION MANAGEMENT -----------------
-export const connectSocket = () => {
-  if (!socket.connected) {
-    socket.connect();
-  }
+// ----------------- CONNECTION -----------------
+export const initSocket = () => {
+  console.log("[SOCKET SERVICE] Initializing socket (cookie auth)...");
+  connectSocket();
+
+  socket.on("connect", () =>
+    console.log("[SOCKET SERVICE] Connected:", socket.id)
+  );
+  socket.on("disconnect", (reason) =>
+    console.log("[SOCKET SERVICE] Disconnected:", reason)
+  );
+  socket.on("connect_error", (err: any) =>
+    console.error("[SOCKET SERVICE] Connection error:", err.message)
+  );
 };
 
-export const disconnectSocket = () => {
-  if (socket.connected) {
-    socket.disconnect();
-    joinedRooms.clear();
-  }
+export const closeSocket = () => {
+  console.log("[SOCKET SERVICE] Closing socket...");
+  disconnectSocket();
+  joinedRooms.clear();
 };
 
 // ----------------- ROOM MANAGEMENT -----------------
 export const joinBookingRoom = (bookingId: string) => {
   if (!joinedRooms.has(bookingId)) {
-    socket.emit("joinRoom", { bookingId });
-    joinedRooms.add(bookingId);
-    console.log(`[SOCKET] Joined room: ${bookingId}`);
+    try {
+      socket.emit("joinBookingRoom", bookingId);
+      joinedRooms.add(bookingId);
+      console.log(`[SOCKET SERVICE] Joined room: ${bookingId}`);
+    } catch (err) {
+      console.error(`[SOCKET SERVICE] Failed to join room ${bookingId}:`, err);
+    }
   }
 };
 
 export const leaveBookingRoom = (bookingId: string) => {
   if (joinedRooms.has(bookingId)) {
-    socket.emit("leaveRoom", { bookingId });
-    joinedRooms.delete(bookingId);
-    console.log(`[SOCKET] Left room: ${bookingId}`);
+    try {
+      socket.emit("leaveRoom", bookingId);
+      joinedRooms.delete(bookingId);
+      console.log(`[SOCKET SERVICE] Left room: ${bookingId}`);
+    } catch (err) {
+      console.error(`[SOCKET SERVICE] Failed to leave room ${bookingId}:`, err);
+    }
   }
 };
 
-// ----------------- SOCKET MESSAGES -----------------
+// ----------------- MESSAGES -----------------
 export const sendMessageSocket = (
   payload: SendMessagePayload & { tempId?: string }
 ) => {
-  socket.emit("sendMessage", payload);
+  try {
+    socket.emit("sendMessage", payload);
+    console.log(`[SOCKET SERVICE] Sent message:`, payload);
+  } catch (err) {
+    console.error("[SOCKET SERVICE] Failed to send message:", err);
+  }
 };
 
-// ----------------- TYPING EVENTS -----------------
+// ----------------- TYPING -----------------
 export const emitTyping = (payload: TypingPayload) => {
-  socket.emit("typing", payload);
+  try {
+    socket.emit("typing", payload);
+  } catch (err) {
+    console.error("[SOCKET SERVICE] Failed to emit typing:", err);
+  }
 };
 
 export const emitStopTyping = (payload: TypingPayload) => {
-  socket.emit("stopTyping", payload);
+  try {
+    socket.emit("stopTyping", payload);
+  } catch (err) {
+    console.error("[SOCKET SERVICE] Failed to emit stopTyping:", err);
+  }
 };
 
 // ----------------- EVENT LISTENERS -----------------
@@ -79,9 +108,7 @@ export const onNewMessage = (
   }: {
     tempId?: string;
     message: Message;
-  }) => {
-    callback({ ...message, tempId });
-  };
+  }) => callback({ ...message, tempId });
 
   socket.off("newMessage", newMessageHandler);
   socket.off("replaceTempMessage", replaceHandler);
@@ -89,37 +116,45 @@ export const onNewMessage = (
   socket.on("newMessage", newMessageHandler);
   socket.on("replaceTempMessage", replaceHandler);
 
+  console.log(
+    "[SOCKET SERVICE] Registered newMessage and replaceTempMessage listeners"
+  );
+
   return () => {
     socket.off("newMessage", newMessageHandler);
     socket.off("replaceTempMessage", replaceHandler);
+    console.log(
+      "[SOCKET SERVICE] Removed newMessage and replaceTempMessage listeners"
+    );
   };
 };
 
-// Typing events
 export const onUserTyping = (callback: () => void) => {
   socket.off("userTyping", callback);
   socket.on("userTyping", callback);
+  console.log("[SOCKET SERVICE] Registered userTyping listener");
   return () => socket.off("userTyping", callback);
 };
 
 export const onUserStopTyping = (callback: () => void) => {
   socket.off("userStoppedTyping", callback);
   socket.on("userStoppedTyping", callback);
+  console.log("[SOCKET SERVICE] Registered userStoppedTyping listener");
   return () => socket.off("userStoppedTyping", callback);
 };
 
-// Online status updates
 export const onUserOnlineStatus = (
   callback: (data: UserOnlineStatusPayload) => void
 ) => {
-  socket.off("updateOnlineStatus", callback);
-  socket.on("updateOnlineStatus", callback);
-  return () => socket.off("updateOnlineStatus", callback);
+  socket.off("userOnlineStatus", callback);
+  socket.on("userOnlineStatus", callback);
+  console.log("[SOCKET SERVICE] Registered userOnlineStatus listener");
+  return () => socket.off("userOnlineStatus", callback);
 };
 
-// Unread count updates
 export const onUpdateUnreadCount = (callback: (data: UnreadCount) => void) => {
   socket.off("updateUnreadCount", callback);
   socket.on("updateUnreadCount", callback);
+  console.log("[SOCKET SERVICE] Registered updateUnreadCount listener");
   return () => socket.off("updateUnreadCount", callback);
 };

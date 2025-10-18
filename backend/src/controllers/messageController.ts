@@ -99,6 +99,7 @@ export const getUnreadMessages = (req: Request, res: Response) => {
 
 // --- Batch unread counts
 export const getUnreadMessagesBatch = (req: Request, res: Response) => {
+  console.log("HIT THIS PLACE: GET UNREAD BATCH MESSAGES")
   const { bookingIds } = req.body;
   const userId = (req as any).user.userId;
   const bookingMap = unreadCounts.get(userId) ?? new Map();
@@ -111,6 +112,7 @@ export const getUnreadMessagesBatch = (req: Request, res: Response) => {
 
 // --- Mark messages as read
 export const markMessagesAsRead = async (req: Request, res: Response) => {
+  console.log("HIT THIS PLACE: MARK MESSAGES AS READ")
   try {
     const { bookingId } = req.params;
     const userId = (req as any).user.userId;
@@ -133,6 +135,8 @@ export const markMessagesAsRead = async (req: Request, res: Response) => {
 };
 
 export const getOnlineStatus = async (req: Request, res: Response) => {
+  console.log("HIT THIS PLACE: GET ONLINE STATUS", activeUsers);
+  
   try {
     const { userId } = req.params;
     const isOnline = activeUsers.has(userId);

@@ -9,13 +9,12 @@ import {
   InfiniteData,
 } from "@tanstack/react-query";
 import {
-  Message,
-  User,
+  MessageWithDelivered,
   BookingDetails,
   PaginatedMessages,
   OnlineStatus,
   SendMessagePayload,
-  MessageWithDelivered,
+  User,
 } from "@/types";
 import {
   XMarkIcon,
@@ -59,7 +58,6 @@ const BookingChat = ({
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
-  // Determine the "other" participant (renter vs owner)
   const otherUserId =
     user && bookingDetails
       ? user.id === bookingDetails.ownerId
@@ -77,9 +75,9 @@ const BookingChat = ({
         getBookingMessages(bookingId, pageParam as number),
       getNextPageParam: (lastPage) =>
         lastPage.hasMore ? lastPage.nextPage : undefined,
-      initialPageParam: 1,
+      initialPageParam: 1, // <-- add this
       enabled: isReady,
-      staleTime: Infinity, // Prevent re-fetching
+      staleTime: Infinity,
     });
 
   const messages: MessageWithDelivered[] =
@@ -102,7 +100,6 @@ const BookingChat = ({
     mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
       sendMessageHttp(payload),
     onError: (_, variables) => {
-      // Remove failed temp message
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
         (old) =>
@@ -157,7 +154,7 @@ const BookingChat = ({
   useEffect(() => {
     if (!isReady) return;
 
-    chatService.connectSocket();
+    chatService.initSocket();
     chatService.joinBookingRoom(bookingId);
 
     const offNewMessage = chatService.onNewMessage((message) => {
@@ -168,13 +165,12 @@ const BookingChat = ({
           const lastPage = old.pages[old.pages.length - 1];
           if (!lastPage) return old;
 
-          // Avoid duplicates
           const isDuplicate = old.pages.some((p) =>
             p.messages.some((m) => m.id === message.id)
           );
           if (isDuplicate) return old;
 
-          if (message.senderId !== user?.id) markReadMutation.mutate();
+          if (message.senderId !== user.id) markReadMutation.mutate();
 
           const updated = {
             ...old,
@@ -184,9 +180,8 @@ const BookingChat = ({
             ],
           };
 
-          if (isScrolledToBottom) {
-            setTimeout(() => scrollToBottom(), 100);
-          }
+          if (isScrolledToBottom) setTimeout(scrollToBottom, 100);
+
           return updated;
         }
       );
@@ -222,14 +217,15 @@ const BookingChat = ({
       offStopTyping();
       offOnline();
       chatService.leaveBookingRoom(bookingId);
-      chatService.disconnectSocket();
+      chatService.closeSocket();
     };
-  }, [bookingId, isReady, otherUserId, user?.id, isScrolledToBottom]);
+  }, [bookingId, isReady, otherUserId, user?.id]);
 
   // -------------------- INPUT HANDLERS --------------------
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
     if (!user) return;
+
     chatService.emitTyping({ bookingId, userId: user.id });
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -265,7 +261,6 @@ const BookingChat = ({
       delivered: false,
     };
 
-    // Optimistic UI
     queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
       ["bookingMessages", bookingId],
       (old) =>
@@ -281,7 +276,6 @@ const BookingChat = ({
           : old
     );
 
-    // Emit + HTTP persist
     chatService.sendMessageSocket({
       bookingId,
       content,
@@ -289,6 +283,7 @@ const BookingChat = ({
       receiverId: otherUserId,
       tempId,
     });
+
     sendMessageMutation.mutate({
       bookingId,
       content,
@@ -299,7 +294,7 @@ const BookingChat = ({
 
     setNewMessage("");
     setIsScrolledToBottom(true);
-    setTimeout(() => scrollToBottom(), 50);
+    setTimeout(scrollToBottom, 50);
   };
 
   // -------------------- SCROLL --------------------
@@ -333,7 +328,6 @@ const BookingChat = ({
 
   if (!bookingDetails || !user) return null;
 
-  // -------------------- DERIVED DISPLAY INFO --------------------
   const otherUserName =
     otherUserProfileData?.name ??
     (user.id === bookingDetails.ownerId
@@ -342,7 +336,7 @@ const BookingChat = ({
 
   const otherUserAvatar = otherUserProfileData?.profilePicture;
 
-  // -------------------- JSX --------------------
+  // -------------------- RENDER --------------------
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
