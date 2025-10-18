@@ -16,7 +16,9 @@ socket.on("connect", () => console.log("[SOCKET] Connected:", socket.id));
 socket.on("disconnect", (reason) =>
   console.log("[SOCKET] Disconnected:", reason)
 );
-socket.on("connect_error", (err: any) =>
+
+// Type the error properly as `Error`
+socket.on("connect_error", (err: Error) =>
   console.error("[SOCKET] Connection error:", err.message)
 );
 

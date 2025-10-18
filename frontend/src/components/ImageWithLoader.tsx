@@ -109,4 +109,4 @@ export default function ImageWithLoader({
     </div>
   );
 }
-import axios, { AxiosError, AxiosRequestConfig } from "axios";
+

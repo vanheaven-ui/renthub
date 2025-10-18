@@ -31,9 +31,13 @@ export const initSocket = () => {
   socket.on("disconnect", (reason) =>
     console.log("[SOCKET SERVICE] Disconnected:", reason)
   );
-  socket.on("connect_error", (err: any) =>
-    console.error("[SOCKET SERVICE] Connection error:", err.message)
-  );
+
+  // Properly type the error
+  socket.on("connect_error", (err: unknown) => {
+    if (err instanceof Error)
+      console.error("[SOCKET SERVICE] Connection error:", err.message);
+    else console.error("[SOCKET SERVICE] Connection error:", err);
+  });
 };
 
 export const closeSocket = () => {
@@ -49,7 +53,7 @@ export const joinBookingRoom = (bookingId: string) => {
       socket.emit("joinBookingRoom", bookingId);
       joinedRooms.add(bookingId);
       console.log(`[SOCKET SERVICE] Joined room: ${bookingId}`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`[SOCKET SERVICE] Failed to join room ${bookingId}:`, err);
     }
   }
@@ -61,7 +65,7 @@ export const leaveBookingRoom = (bookingId: string) => {
       socket.emit("leaveRoom", bookingId);
       joinedRooms.delete(bookingId);
       console.log(`[SOCKET SERVICE] Left room: ${bookingId}`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`[SOCKET SERVICE] Failed to leave room ${bookingId}:`, err);
     }
   }
@@ -74,7 +78,7 @@ export const sendMessageSocket = (
   try {
     socket.emit("sendMessage", payload);
     console.log(`[SOCKET SERVICE] Sent message:`, payload);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[SOCKET SERVICE] Failed to send message:", err);
   }
 };
@@ -83,7 +87,7 @@ export const sendMessageSocket = (
 export const emitTyping = (payload: TypingPayload) => {
   try {
     socket.emit("typing", payload);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[SOCKET SERVICE] Failed to emit typing:", err);
   }
 };
@@ -91,7 +95,7 @@ export const emitTyping = (payload: TypingPayload) => {
 export const emitStopTyping = (payload: TypingPayload) => {
   try {
     socket.emit("stopTyping", payload);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[SOCKET SERVICE] Failed to emit stopTyping:", err);
   }
 };
@@ -102,6 +106,7 @@ export const onNewMessage = (
 ) => {
   const newMessageHandler = (msg: Message) =>
     callback(msg as NewMessagePayload);
+
   const replaceHandler = ({
     tempId,
     message,

@@ -14,7 +14,6 @@ import {
   InitiatePaymentPayload,
   PaymentResponse,
   OnlineStatus,
-  Message,
   SendMessagePayload,
   PaginatedMessages,
   AskExpertPayload,

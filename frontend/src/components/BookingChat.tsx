@@ -75,7 +75,7 @@ const BookingChat = ({
         getBookingMessages(bookingId, pageParam as number),
       getNextPageParam: (lastPage) =>
         lastPage.hasMore ? lastPage.nextPage : undefined,
-      initialPageParam: 1, // <-- add this
+      initialPageParam: 1,
       enabled: isReady,
       staleTime: Infinity,
     });
@@ -93,7 +93,7 @@ const BookingChat = ({
 
   useEffect(() => {
     if (isReady) markReadMutation.mutate();
-  }, [bookingId, isReady]);
+  }, [bookingId, isReady, markReadMutation]); // ✅ added markReadMutation
 
   // -------------------- SEND MESSAGE --------------------
   const sendMessageMutation = useMutation({
@@ -219,7 +219,15 @@ const BookingChat = ({
       chatService.leaveBookingRoom(bookingId);
       chatService.closeSocket();
     };
-  }, [bookingId, isReady, otherUserId, user?.id]);
+  }, [
+    bookingId,
+    isReady,
+    otherUserId,
+    user?.id,
+    isScrolledToBottom, // ✅ added
+    markReadMutation, // ✅ added
+    queryClient, // ✅ added
+  ]);
 
   // -------------------- INPUT HANDLERS --------------------
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
