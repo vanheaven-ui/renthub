@@ -43,7 +43,7 @@ const api = axios.create({
 // ----------------- Centralized Error Handling -----------------
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  (error: AxiosError<BackendErrorResponse>) => {
     const config = error.config as CustomAxiosRequestConfig;
     const shouldShowToast = !config?.silenceToast;
 
@@ -54,8 +54,7 @@ api.interceptors.response.use(
       if (shouldShowToast) toast.error(errorMessage);
     } else if (error.response) {
       const status = error.response.status;
-      const backendErrorMsg = (error.response.data as BackendErrorResponse)
-        ?.message;
+      const backendErrorMsg = error.response.data?.message;
 
       switch (status) {
         case 400:
@@ -118,8 +117,26 @@ export const logoutUser = async (): Promise<void> => {
 };
 
 // ----------------- Listings -----------------
-export const getListings = async (): Promise<Listing[]> => {
-  const res = await api.get<Listing[]>("/api/listings");
+export const getListings = async (filters?: {
+  search?: string | null;
+  category?: string | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  location?: string | null;
+}): Promise<Listing[]> => {
+  const params: Record<string, string | number> = {};
+
+  if (filters) {
+    if (filters.search) params.search = filters.search;
+    if (filters.category) params.category = filters.category;
+    if (filters.minPrice != null) params.minPrice = filters.minPrice;
+    if (filters.maxPrice != null) params.maxPrice = filters.maxPrice;
+    if (filters.location) params.location = filters.location;
+  }
+
+  const res: AxiosResponse<Listing[]> = await api.get("/api/listings", {
+    params,
+  });
   return res.data;
 };
 
@@ -131,7 +148,7 @@ export const getMyListings = async (): Promise<Listing[]> => {
 };
 
 export const getListingById = async (id: string): Promise<Listing> => {
-  const res = await api.get<Listing>(`/api/listings/${id}`);
+  const res: AxiosResponse<Listing> = await api.get(`/api/listings/${id}`);
   return res.data;
 };
 
@@ -172,12 +189,16 @@ export const createBooking = async (
 };
 
 export const getBookingById = async (bookingId: string): Promise<Booking> => {
-  const res = await api.get<Booking>(`/api/bookings/${bookingId}`);
+  const res: AxiosResponse<Booking> = await api.get(
+    `/api/bookings/${bookingId}`
+  );
   return res.data;
 };
 
 export const getMyBookings = async (): Promise<Booking[]> => {
-  const res = await api.get<Booking[]>("/api/bookings/my-bookings");
+  const res: AxiosResponse<Booking[]> = await api.get(
+    "/api/bookings/my-bookings"
+  );
   return res.data;
 };
 
@@ -188,6 +209,21 @@ export const updateBookingStatus = async (
   const res: AxiosResponse<Booking> = await api.patch(
     `/api/bookings/${bookingId}/status`,
     { status }
+  );
+  return res.data;
+};
+
+export const updateBookingDates = async (params: {
+  bookingId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<Booking> => {
+  const res: AxiosResponse<Booking> = await api.patch(
+    `/api/bookings/${params.bookingId}/dates`,
+    {
+      startDate: params.startDate,
+      endDate: params.endDate,
+    }
   );
   return res.data;
 };
@@ -249,7 +285,9 @@ export const getBookingMessages = async (
 ): Promise<PaginatedMessages> => {
   const res: AxiosResponse<PaginatedMessages> = await api.get(
     `/api/bookings/${bookingId}/messages`,
-    { params: { page, limit } } as CustomAxiosRequestConfig
+    {
+      params: { page, limit },
+    } as CustomAxiosRequestConfig
   );
   return res.data;
 };
@@ -297,7 +335,9 @@ export const askUgandaRentalExpert = async (
   const res: AxiosResponse<AskExpertResponse> = await api.post(
     "/api/ai/ask-expert",
     payload,
-    { silenceToast: true } as CustomAxiosRequestConfig
+    {
+      silenceToast: true,
+    } as CustomAxiosRequestConfig
   );
   return res.data;
 };

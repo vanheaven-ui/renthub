@@ -1,3 +1,4 @@
+// @/lib/socket.ts
 import { io, Socket } from "socket.io-client";
 
 const URL = process.env.NEXT_PUBLIC_BACKEND_URL as string;
@@ -11,16 +12,10 @@ export const socket: Socket = io(URL, {
   reconnectionDelay: 1000,
 });
 
-// ----------------- DEBUG -----------------
-socket.on("connect", () => console.log("[SOCKET] Connected:", socket.id));
-socket.on("disconnect", (reason) =>
-  console.log("[SOCKET] Disconnected:", reason)
-);
-
-// Type the error properly as `Error`
-socket.on("connect_error", (err: Error) =>
-  console.error("[SOCKET] Connection error:", err.message)
-);
+// ----------------- DEBUG (REMOVED GLOBAL LISTENERS) -----------------
+// The global listeners are removed here. They should only be registered
+// once in a stable location (like chatService.ts init or a top-level component)
+// to prevent duplicate logs/behavior.
 
 // ----------------- CONNECTION -----------------
 export const connectSocket = () => {
@@ -31,6 +26,8 @@ export const connectSocket = () => {
 };
 
 export const disconnectSocket = () => {
+  // Note: Disconnect often sets autoConnect to false internally,
+  // but the client-side logic should handle re-connection attempts.
   if (socket.connected) {
     console.log("[SOCKET] Disconnecting...");
     socket.disconnect();

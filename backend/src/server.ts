@@ -65,7 +65,7 @@ const serverInstance = server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-//  Graceful Shutdown Handling ---
+//  Graceful Shutdown Handling (Centralized) ---
 const shutdown = async () => {
   console.log("Shutting down gracefully...");
   await prisma.$disconnect();
@@ -78,6 +78,4 @@ const shutdown = async () => {
 // Handle common shutdown signals
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-process.on("beforeExit", async () => {
-  await prisma.$disconnect();
-});
+process.on("beforeExit", shutdown);

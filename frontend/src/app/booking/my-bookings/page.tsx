@@ -51,7 +51,7 @@ const MyBookingsPage = () => {
     {} as Record<string, number>
   );
 
-  // --- Socket handlers ---
+  // --- Socket handlers (using useCallback with stable dependencies) ---
   const handleUnreadUpdate = useCallback(
     (data: { bookingId: string; count: number }) => {
       queryClient.setQueryData(
@@ -86,43 +86,75 @@ const MyBookingsPage = () => {
     queryClient.invalidateQueries({ queryKey: ["myBookings", user.id] });
   }, [queryClient, user]);
 
-  // --- Socket connection & listeners ---
+  // 🟢 EFFECT 1: Socket Connection and Core Listeners (Runs once per user session)
   useEffect(() => {
     if (!user) return;
 
     // Connect using cookies
     connectSocket();
+    console.log("[SOCKET] Attempting connection...");
 
-    // Once connected, join all rooms
-    socket.on("connect", () => {
-      console.log("[SOCKET] Connected via cookies!");
-      bookingIds.forEach((id) => {
-        socket.emit("joinBookingRoom", id);
-        console.log(`[SOCKET] Joined booking room: ${id}`);
-      });
-    });
+    // Set static listeners
+    socket.on("connect", () => console.log("[SOCKET] Connected successfully!"));
+    socket.on("disconnect", (reason) =>
+      console.log(`[SOCKET] Disconnected: ${reason}`)
+    );
 
     socket.on("updateUnreadCount", handleUnreadUpdate);
     socket.on("bookingStatusUpdated", handleStatusUpdate);
     socket.on("newBooking", handleNewBooking);
 
     return () => {
+      // Cleanup: remove listeners and disconnect the socket entirely
+      socket.off("connect");
+      socket.off("disconnect");
       socket.off("updateUnreadCount", handleUnreadUpdate);
       socket.off("bookingStatusUpdated", handleStatusUpdate);
       socket.off("newBooking", handleNewBooking);
       disconnectSocket();
+      console.log("[SOCKET] Cleanup: Disconnected socket.");
     };
   }, [
     user,
-    bookingIds,
-    handleUnreadUpdate,
-    handleStatusUpdate,
-    handleNewBooking,
+    // CRITICAL: Removed bookingIds, handleUnreadUpdate, handleStatusUpdate, handleNewBooking
+    // from the connection effect to ensure it only runs on user change.
   ]);
+
+  // 🟢 EFFECT 2: Room Joining (Runs when connection is stable AND booking list changes)
+  useEffect(() => {
+    if (!user || bookingIds.length === 0) return;
+
+    const joinRooms = () => {
+      // Only join rooms if the socket is actually connected
+      if (socket.connected) {
+        bookingIds.forEach((id) => {
+          socket.emit("joinBookingRoom", id);
+          // NOTE: Removed console.log here to prevent client-side spam
+        });
+        console.log(`[SOCKET] Joined ${bookingIds.length} booking rooms.`);
+      }
+    };
+
+    // Join immediately if already connected
+    joinRooms();
+
+    // Ensure re-join on reconnect
+    socket.on("connect", joinRooms);
+
+    return () => {
+      // Remove listener for room joining on future connects
+      socket.off("connect", joinRooms);
+      // NOTE: A proper cleanup would be emitting a "leaveBookingRoom" event on the server
+      // to free up resources, but relying on disconnect is often acceptable.
+    };
+  }, [user, bookingIds]); // Now, only triggered when the list of bookings changes
+
+  // --- The rest of the component logic is sound ---
 
   const openChat = (bookingId: string) => {
     setActiveBookingId(bookingId);
 
+    // Optimistically update unread count to 0 in UI
     queryClient.setQueryData<UnreadCount[]>(
       ["unreadMessagesBatch", bookingIds],
       (old) =>
@@ -130,6 +162,9 @@ const MyBookingsPage = () => {
           item.bookingId === bookingId ? { ...item, unreadCount: 0 } : item
         ) || []
     );
+
+    // Server call to mark as read is implicitly handled by BookingChat component mount
+    // or should be explicitly emitted here: socket.emit("markMessagesAsRead", { bookingId });
   };
 
   const handleCloseChat = () => setActiveBookingId(null);
@@ -256,7 +291,10 @@ const MyBookingsPage = () => {
             </p>
             <div className="flex justify-end gap-3 mt-4">
               <button
-                onClick={() => openChat(modalBooking.id)}
+                onClick={() => {
+                  openChat(modalBooking.id);
+                  setModalBooking(null); // Close the modal after opening chat
+                }}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
               >
                 Chat Owner

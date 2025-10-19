@@ -22,7 +22,7 @@ import {
   ArrowUpIcon,
 } from "@heroicons/react/24/outline";
 import { CheckIcon as CheckIconSolid } from "@heroicons/react/20/solid";
-import * as chatService from "@/services/chatService";
+import * as chatService from "@/services/chatService"; // Assuming this is @/lib/chatService
 import { useAuth } from "@/app/context/AuthProvider";
 import {
   getBookingMessages,
@@ -93,7 +93,7 @@ const BookingChat = ({
 
   useEffect(() => {
     if (isReady) markReadMutation.mutate();
-  }, [bookingId, isReady, markReadMutation]); // ✅ added markReadMutation
+  }, [bookingId, isReady, markReadMutation]);
 
   // -------------------- SEND MESSAGE --------------------
   const sendMessageMutation = useMutation({
@@ -150,13 +150,18 @@ const BookingChat = ({
     );
   }, [initialOnlineStatusData]);
 
-  // -------------------- SOCKET CONNECTION --------------------
+  // -------------------- SOCKET CONNECTION & LISTENERS --------------------
   useEffect(() => {
     if (!isReady) return;
 
+    // 1. Ensure socket is connected (The parent component should handle this,
+    // but it doesn't hurt to ensure it's initialized if not already)
     chatService.initSocket();
+
+    // 2. Join the specific room
     chatService.joinBookingRoom(bookingId);
 
+    // 3. Register listeners
     const offNewMessage = chatService.onNewMessage((message) => {
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
@@ -170,6 +175,7 @@ const BookingChat = ({
           );
           if (isDuplicate) return old;
 
+          // Mark as read if the message is from the other user
           if (message.senderId !== user.id) markReadMutation.mutate();
 
           const updated = {
@@ -211,22 +217,24 @@ const BookingChat = ({
       }
     });
 
+    // 4. Cleanup: Remove listeners and leave the room, but DO NOT disconnect the global socket.
     return () => {
       offNewMessage();
       offTyping();
       offStopTyping();
       offOnline();
       chatService.leaveBookingRoom(bookingId);
-      chatService.closeSocket();
+      // ❌ REMOVED: chatService.closeSocket();
+      // This component MUST NOT disconnect the entire global socket.
     };
   }, [
     bookingId,
     isReady,
     otherUserId,
     user?.id,
-    isScrolledToBottom, // ✅ added
-    markReadMutation, // ✅ added
-    queryClient, // ✅ added
+    isScrolledToBottom,
+    markReadMutation,
+    queryClient,
   ]);
 
   // -------------------- INPUT HANDLERS --------------------
@@ -284,6 +292,13 @@ const BookingChat = ({
           : old
     );
 
+    // ⚠️ ISSUE: You are sending the message via both socket and HTTP.
+    // This is usually a bad pattern. Pick one. Since you have HTTP mutation
+    // with error handling, you should likely use that for reliability and
+    // rely on the server to relay the message back via socket.
+    // If you must use socket, remove the HTTP call.
+
+    // OPTION 1: Use only Socket (Optimistic Update handled above)
     chatService.sendMessageSocket({
       bookingId,
       content,
@@ -292,13 +307,21 @@ const BookingChat = ({
       tempId,
     });
 
-    sendMessageMutation.mutate({
-      bookingId,
-      content,
-      senderId: user.id,
-      receiverId: otherUserId,
-      tempId,
-    });
+    // OPTION 2: Use only HTTP (Remove this if you stick with Option 1)
+    // sendMessageMutation.mutate({
+    //     bookingId,
+    //     content,
+    //     senderId: user.id,
+    //     receiverId: otherUserId,
+    //     tempId,
+    // });
+
+    // Clearing typing timeout/state after sending a message
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    chatService.emitStopTyping({ bookingId, userId: user.id });
 
     setNewMessage("");
     setIsScrolledToBottom(true);
@@ -347,6 +370,7 @@ const BookingChat = ({
   // -------------------- RENDER --------------------
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* ... rest of JSX remains the same ... */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}

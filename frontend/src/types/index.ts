@@ -46,6 +46,8 @@ export interface Listing {
   owner?: User | null;
   alreadyBooked?: boolean;
   bookings?: Booking[];
+  rating?: number;
+  createdAt: string;
 }
 
 // Updated payload to support editing removed images

@@ -1,3 +1,4 @@
+// @/lib/chatService.ts
 import { socket, connectSocket, disconnectSocket } from "@/lib/socket";
 import { Message, SendMessagePayload, UnreadCount } from "@/types";
 
@@ -18,37 +19,45 @@ interface UserOnlineStatusPayload {
 }
 
 // ----------------- STATE -----------------
+// IMPORTANT: This set should be relied on by components to manage state,
+// but the server ultimately decides room membership.
 const joinedRooms = new Set<string>();
 
 // ----------------- CONNECTION -----------------
+
+// The initSocket function is fine as it runs once (in MyBookingsPage's Effect 1)
 export const initSocket = () => {
   console.log("[SOCKET SERVICE] Initializing socket (cookie auth)...");
   connectSocket();
 
+  // Register global connection listeners here (once)
   socket.on("connect", () =>
     console.log("[SOCKET SERVICE] Connected:", socket.id)
   );
   socket.on("disconnect", (reason) =>
     console.log("[SOCKET SERVICE] Disconnected:", reason)
   );
-
-  // Properly type the error
   socket.on("connect_error", (err: unknown) => {
     if (err instanceof Error)
-      console.error("[SOCKET SERVICE] Connection error:", err.message);
-    else console.error("[SOCKET SERVICE] Connection error:", err);
+      // This is the CRITICAL log from the server (e.g., "Authentication error: No token found")
+      console.error("[SOCKET SERVICE] ❌ Connection error:", err.message);
+    else console.error("[SOCKET SERVICE] ❌ Connection error:", err);
   });
 };
 
 export const closeSocket = () => {
+  // Only disconnect the socket if needed (e.g., user logs out or leaves page)
   console.log("[SOCKET SERVICE] Closing socket...");
+  // Clear listeners before disconnecting to prevent memory leaks
+  socket.removeAllListeners();
   disconnectSocket();
   joinedRooms.clear();
 };
 
 // ----------------- ROOM MANAGEMENT -----------------
 export const joinBookingRoom = (bookingId: string) => {
-  if (!joinedRooms.has(bookingId)) {
+  // CRITICAL: Only emit if connected to prevent failed handshake attempts
+  if (socket.connected && !joinedRooms.has(bookingId)) {
     try {
       socket.emit("joinBookingRoom", bookingId);
       joinedRooms.add(bookingId);
@@ -56,12 +65,19 @@ export const joinBookingRoom = (bookingId: string) => {
     } catch (err: unknown) {
       console.error(`[SOCKET SERVICE] Failed to join room ${bookingId}:`, err);
     }
+  } else if (!socket.connected) {
+    // Log if attempting to join room before connection is stable
+    console.warn(
+      `[SOCKET SERVICE] Cannot join room ${bookingId}. Socket not connected.`
+    );
   }
 };
 
 export const leaveBookingRoom = (bookingId: string) => {
   if (joinedRooms.has(bookingId)) {
     try {
+      // Note: Your server implementation may not have a 'leaveRoom' handler.
+      // If it does, ensure the server handler removes the socket from the room.
       socket.emit("leaveRoom", bookingId);
       joinedRooms.delete(bookingId);
       console.log(`[SOCKET SERVICE] Left room: ${bookingId}`);
@@ -71,10 +87,11 @@ export const leaveBookingRoom = (bookingId: string) => {
   }
 };
 
-// ----------------- MESSAGES -----------------
+// ----------------- MESSAGES & TYPING (Logic is fine) -----------------
 export const sendMessageSocket = (
   payload: SendMessagePayload & { tempId?: string }
 ) => {
+  // ... logic remains the same ...
   try {
     socket.emit("sendMessage", payload);
     console.log(`[SOCKET SERVICE] Sent message:`, payload);
@@ -83,8 +100,8 @@ export const sendMessageSocket = (
   }
 };
 
-// ----------------- TYPING -----------------
 export const emitTyping = (payload: TypingPayload) => {
+  // ... logic remains the same ...
   try {
     socket.emit("typing", payload);
   } catch (err: unknown) {
@@ -93,6 +110,7 @@ export const emitTyping = (payload: TypingPayload) => {
 };
 
 export const emitStopTyping = (payload: TypingPayload) => {
+  // ... logic remains the same ...
   try {
     socket.emit("stopTyping", payload);
   } catch (err: unknown) {
@@ -100,7 +118,11 @@ export const emitStopTyping = (payload: TypingPayload) => {
   }
 };
 
-// ----------------- EVENT LISTENERS -----------------
+// ----------------- EVENT LISTENERS (Refined) -----------------
+
+// The cleanup logic inside the returned function is what React's useEffect relies on.
+// We remove the duplicate socket.off/socket.on pattern from the start of the function.
+
 export const onNewMessage = (
   callback: (message: NewMessagePayload) => void
 ) => {
@@ -115,8 +137,7 @@ export const onNewMessage = (
     message: Message;
   }) => callback({ ...message, tempId });
 
-  socket.off("newMessage", newMessageHandler);
-  socket.off("replaceTempMessage", replaceHandler);
+  // ⛔ Removed socket.off calls here! The consumer's useEffect cleanup handles this.
 
   socket.on("newMessage", newMessageHandler);
   socket.on("replaceTempMessage", replaceHandler);
@@ -134,15 +155,16 @@ export const onNewMessage = (
   };
 };
 
-export const onUserTyping = (callback: () => void) => {
-  socket.off("userTyping", callback);
+// Example of simplified listener function:
+export const onUserTyping = (callback: (payload: TypingPayload) => void) => {
   socket.on("userTyping", callback);
   console.log("[SOCKET SERVICE] Registered userTyping listener");
   return () => socket.off("userTyping", callback);
 };
 
-export const onUserStopTyping = (callback: () => void) => {
-  socket.off("userStoppedTyping", callback);
+export const onUserStopTyping = (
+  callback: (payload: TypingPayload) => void
+) => {
   socket.on("userStoppedTyping", callback);
   console.log("[SOCKET SERVICE] Registered userStoppedTyping listener");
   return () => socket.off("userStoppedTyping", callback);
@@ -151,14 +173,12 @@ export const onUserStopTyping = (callback: () => void) => {
 export const onUserOnlineStatus = (
   callback: (data: UserOnlineStatusPayload) => void
 ) => {
-  socket.off("userOnlineStatus", callback);
   socket.on("userOnlineStatus", callback);
   console.log("[SOCKET SERVICE] Registered userOnlineStatus listener");
   return () => socket.off("userOnlineStatus", callback);
 };
 
 export const onUpdateUnreadCount = (callback: (data: UnreadCount) => void) => {
-  socket.off("updateUnreadCount", callback);
   socket.on("updateUnreadCount", callback);
   console.log("[SOCKET SERVICE] Registered updateUnreadCount listener");
   return () => socket.off("updateUnreadCount", callback);

@@ -10,6 +10,7 @@ import { useAuth } from "@/app/context/AuthProvider";
 import { Booking, BookingStatus as BookingStatusEnum } from "@/types";
 import ImageWithLoader from "./ImageWithLoader";
 import { formatNumber } from "@/lib/formatNumbers";
+import { useRouter } from "next/navigation";
 
 interface BookingCardProps {
   booking: Booking;
@@ -27,6 +28,8 @@ const BookingCard = ({
   onCheckoutClick,
 }: BookingCardProps) => {
   const { user } = useAuth();
+  const router = useRouter();
+
   const isRenter = user?.id === booking.renterId;
   const isOwner = user?.id === booking.ownerId;
   const showPaymentButton = isRenter && booking.paymentStatus === "PENDING";
@@ -63,9 +66,18 @@ const BookingCard = ({
     );
   }
 
+  // --- Navigate to booking details page ---
+  const handleCardClick = () => {
+    router.push(`/booking/${booking.id}`);
+  };
+
   return (
-    <div className="relative p-6 bg-white/50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden group transition-all duration-500 hover:scale-[1.03] transform">
+    <div
+      className="relative p-6 bg-white/50 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden group transition-all duration-500 hover:scale-[1.03] transform cursor-pointer"
+      onClick={handleCardClick}
+    >
       <div className="absolute inset-0 bg-gradient-to-br from-pink-50 to-purple-50 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
       <div className="relative z-10 flex flex-col h-full">
         {/* Images stacked uniquely */}
         <div className="relative w-full h-48 rounded-2xl overflow-hidden shadow-lg border-2 border-white mb-4 flex items-center justify-center">
@@ -150,7 +162,10 @@ const BookingCard = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-6 flex flex-col space-y-4">
+        <div
+          className="mt-6 flex flex-col space-y-4"
+          onClick={(e) => e.stopPropagation()} // Prevent navigating when clicking buttons
+        >
           {showPaymentButton && (
             <button
               onClick={() => onCheckoutClick(booking.id)}

@@ -1,115 +1,75 @@
-"use client";
-
-import { Listing } from "@/types";
-import { useState } from "react";
-import Link from "next/link";
-// Import Next.js Image component
+import { motion } from "framer-motion";
+import { StarIcon, MapPinIcon } from "@heroicons/react/24/outline";
 import Image from "next/image";
-import {
-  CalendarDaysIcon,
-  CurrencyDollarIcon,
-  PencilSquareIcon,
-} from "@heroicons/react/24/outline";
-import { formatNumber } from "@/lib/formatNumbers";
+import { Listing } from "@/types";
 
-interface ListingCardProps {
+export default function ListingCard({
+  listing,
+  hoveredListing,
+  setHoveredListing,
+  onClick,
+}: {
   listing: Listing;
-}
-
-const ListingCard = ({ listing }: ListingCardProps) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  const images = listing.images || [];
-  const currentImageUrl = images[currentImageIndex] || "";
-
-  // Carousel dots handler
-  const goToImage = (idx: number) => setCurrentImageIndex(idx);
-
-  const totalBookings = listing.bookings?.length || 0;
-  const totalEarnings = (listing.bookings || []).reduce(
-    (sum, b) => sum + (b.status === "CONFIRMED" ? b.totalAmount || 0 : 0),
-    0
-  );
-
+  hoveredListing: string | null;
+  setHoveredListing: (id: string | null) => void;
+  onClick: () => void;
+}) {
   return (
-    <div className="group relative bg-white/60 backdrop-blur-md rounded-3xl shadow-2xl overflow-hidden transition-transform hover:scale-105 hover:shadow-3xl">
-      {/* Image */}
-      <div className="relative h-64 rounded-t-3xl overflow-hidden bg-gray-200 flex items-center justify-center">
-        {currentImageUrl ? (
-          // Replaced <img> with <Image />
-          <Image
-            src={currentImageUrl}
-            alt={listing.title}
-            // Mandatory Next.js Image props (aspect ratio of 16:9 for a typical h-64 container)
-            width={700}
-            height={400}
-            // Setting 'priority' because this is a primary visible element in the card list
-            priority={true}
-            className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <span className="text-gray-500 font-semibold text-lg text-center p-4">
-            No image available
-          </span>
-        )}
-        {/* Dots */}
-        {images.length > 1 && (
-          <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-2">
-            {images.map((_, idx) => (
-              <span
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      onMouseEnter={() => setHoveredListing(listing.id)}
+      onMouseLeave={() => setHoveredListing(null)}
+      onClick={onClick}
+      className="relative bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden cursor-pointer transition hover:shadow-2xl hover:-translate-y-1 transform duration-300"
+    >
+      <div className="relative w-full h-56">
+        <Image
+          src={listing.images[0] || "/placeholder.jpg"}
+          alt={listing.title}
+          fill
+          className="object-cover w-full h-full"
+        />
+        {hoveredListing === listing.id && listing.images.length > 1 && (
+          <div className="absolute inset-0 grid grid-cols-3 gap-1 p-2 bg-black/40">
+            {listing.images.slice(1, 4).map((img, idx) => (
+              <div
                 key={idx}
-                onClick={() => goToImage(idx)}
-                className={`w-2 h-2 rounded-full cursor-pointer ${
-                  idx === currentImageIndex ? "bg-purple-700" : "bg-white/60"
-                }`}
-              />
+                className="relative w-full h-full rounded-md overflow-hidden"
+              >
+                <Image
+                  src={img}
+                  alt={`${listing.title}-${idx + 1}`}
+                  fill
+                  className="object-cover w-full h-full"
+                />
+              </div>
             ))}
           </div>
         )}
+        <div className="absolute top-2 left-2 bg-pink-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md flex items-center gap-1">
+          <StarIcon className="w-3 h-3 fill-current" />
+          {listing.rating ?? "New"}
+        </div>
+        {listing.alreadyBooked && (
+          <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
+            Booked
+          </span>
+        )}
       </div>
-
-      {/* Info */}
-      <div className="p-6">
-        <h3 className="text-2xl font-bold text-purple-800 mb-2">
+      <div className="p-4">
+        <h3 className="text-lg font-bold text-purple-900 truncate">
           {listing.title}
         </h3>
-        <p className="text-gray-700 line-clamp-2">{listing.description}</p>
-        <p className="text-gray-900 font-semibold mt-2">
-          <span className="bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-1 rounded-full font-bold flex items-center gap-2">
-            <span className="text-xs font-semibold">UGX</span>
-            <span>{formatNumber(listing.pricePerDay)} / night</span>
-          </span>
+        <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+          <MapPinIcon className="w-4 h-4 text-pink-500" /> {listing.location}
         </p>
-        <p className="text-gray-500 text-sm mt-1">{listing.location}</p>
-
-        {/* Stats */}
-        <div className="mt-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <CalendarDaysIcon className="w-6 h-6 text-pink-600" />
-            <span className="text-gray-700 font-medium">
-              {totalBookings} Bookings
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CurrencyDollarIcon className="w-6 h-6 text-purple-600" />
-            <span className="text-gray-700 font-medium">
-              UGX {totalEarnings}
-            </span>
-          </div>
-        </div>
-
-        {/* Edit button */}
-        <div className="mt-4 flex justify-end">
-          <Link
-            href={`/listing/edit/${listing.id}`}
-            className="px-4 py-2 bg-white text-purple-700 rounded-lg shadow hover:bg-gray-100 transition flex items-center gap-1"
-          >
-            <PencilSquareIcon className="w-5 h-5" /> Edit
-          </Link>
-        </div>
+        <p className="text-xl font-extrabold text-purple-700 mt-2">
+          UGX {listing.pricePerDay.toLocaleString()}
+          <span className="text-base font-medium text-gray-500">/day</span>
+        </p>
       </div>
-    </div>
+    </motion.div>
   );
-};
-
-export default ListingCard;
+}

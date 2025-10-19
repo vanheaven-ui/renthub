@@ -3,3 +3,87 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 🌈 Hero Gradient Background */
+.hero-gradient {
+  @apply bg-gradient-to-br from-gradientStart/40 via-purple-500/20 to-gradientEnd/30;
+}
+
+/* 🌀 Abstract Floating Shapes */
+.shape {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  opacity: 0.5;
+  z-index: 0;
+}
+
+.shape-1 {
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, #c084fc 0%, transparent 70%);
+  top: 10%;
+  left: 5%;
+  animation: float 7s ease-in-out infinite;
+}
+
+.shape-2 {
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, #9333ea 0%, transparent 70%);
+  top: 45%;
+  right: 8%;
+  animation: floatSlow 12s ease-in-out infinite;
+}
+
+.shape-3 {
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, #a855f7 0%, transparent 70%);
+  bottom: 10%;
+  left: 30%;
+  animation: pulseGlow 10s ease-in-out infinite;
+}
+
+/* 🧊 Glassy Reflections (Subtle Transparent Orbs) */
+.glass-orb {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--orb-gradient);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 0;
+}
+
+.orb-1 {
+  --orb-gradient: linear-gradient(135deg, rgba(255,255,255,0.3), rgba(255,255,255,0.05));
+  width: 140px;
+  height: 140px;
+  top: 30%;
+  left: 20%;
+  animation: shimmer 6s ease-in-out infinite;
+}
+
+.orb-2 {
+  --orb-gradient: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05));
+  width: 180px;
+  height: 180px;
+  top: 60%;
+  right: 25%;
+  animation: shimmer 7s ease-in-out infinite reverse;
+}
+
+/* 🪞 Light Motion Trails (Soft Overlay) */
+.motion-trail {
+  position: absolute;
+  width: 120%;
+  height: 120%;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.05),
+    transparent 80%
+  );
+  mix-blend-mode: overlay;
+  animation: pulseGlow 12s ease-in-out infinite;
+}

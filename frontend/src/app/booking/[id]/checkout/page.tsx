@@ -136,10 +136,13 @@ const CheckoutPage = () => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 py-10 overflow-hidden">
-      {/* Background blobs */}
-      <div className="absolute -top-32 -left-32 w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-40 pointer-events-none" />
-      <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/4 w-80 h-80 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 pointer-events-none" />
+      {/* Animated circular shapes */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute w-72 h-72 bg-purple-300/40 rounded-full blur-3xl animate-float-slow top-10 left-10" />
+        <div className="absolute w-96 h-96 bg-pink-300/30 rounded-full blur-3xl animate-float-medium top-1/3 right-10" />
+        <div className="absolute w-64 h-64 bg-blue-300/40 rounded-full blur-3xl animate-float-fast bottom-10 left-1/3" />
+        <div className="absolute w-80 h-80 bg-yellow-200/30 rounded-full blur-3xl animate-float-slow bottom-1/4 right-1/4" />
+      </div>
 
       <div className="relative container mx-auto max-w-6xl z-10 px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row items-start gap-8">

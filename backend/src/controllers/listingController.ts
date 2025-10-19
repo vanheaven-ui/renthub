@@ -10,7 +10,6 @@ interface CreateListingRequest extends AuthRequest {
     | { [fieldname: string]: Express.Multer.File[] };
 }
 
-// Accept Multer files array OR object
 interface EditListingRequest extends AuthRequest {
   files?:
     | Express.Multer.File[]
@@ -81,15 +80,29 @@ export const createListing = async (
       .json({ message: "Listing created successfully", listing: newListing });
   } catch (error) {
     console.error("Error in createListing:", error);
-    res.status(500).json({
-      message: "Internal server error",
-      error: (error as Error).message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Internal server error",
+        error: (error as Error).message,
+      });
   }
 };
 
 /**
- * Get all listings with optional filters and signed URLs
+ * Helper to convert file paths to public URLs
+ */
+const toPublicUrls = (filePaths: string[]) => {
+  return filePaths.map((filePath) => {
+    const { data } = supabase.storage
+      .from(supabaseBucket)
+      .getPublicUrl(filePath);
+    return data.publicUrl;
+  });
+};
+
+/**
+ * Get all listings with optional filters and public URLs
  */
 export const getListings = async (req: AuthRequest, res: Response) => {
   try {
@@ -130,37 +143,26 @@ export const getListings = async (req: AuthRequest, res: Response) => {
       bookedListingIds = myBookings.map((b) => b.listingId);
     }
 
-    const listingsWithFlags = await Promise.all(
-      listings.map(async (listing) => {
-        const signedImages = await Promise.all(
-          listing.images.map(async (filePath: string) => {
-            const { data } = await supabase.storage
-              .from(supabaseBucket)
-              .createSignedUrl(filePath, 60 * 60);
-            return data?.signedUrl || filePath;
-          })
-        );
+    const listingsWithUrls = listings.map((listing) => ({
+      ...listing,
+      images: toPublicUrls(listing.images),
+      alreadyBooked: bookedListingIds.includes(listing.id),
+    }));
 
-        return {
-          ...listing,
-          images: signedImages,
-          alreadyBooked: bookedListingIds.includes(listing.id),
-        };
-      })
-    );
-
-    res.status(200).json(listingsWithFlags);
+    res.status(200).json(listingsWithUrls);
   } catch (error) {
     console.error("Error in getListings:", error);
-    res.status(500).json({
-      message: "Internal server error",
-      error: (error as Error).message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Internal server error",
+        error: (error as Error).message,
+      });
   }
 };
 
 /**
- * Get listing by ID with signed URLs and alreadyBooked flag
+ * Get listing by ID with public URLs
  */
 export const getListingById = async (req: AuthRequest, res: Response) => {
   try {
@@ -187,22 +189,21 @@ export const getListingById = async (req: AuthRequest, res: Response) => {
           ["CONFIRMED", "PENDING"].includes(b.status as string)
       );
 
-    const signedImages = await Promise.all(
-      listing.images.map(async (filePath: string) => {
-        const { data } = await supabase.storage
-          .from(supabaseBucket)
-          .createSignedUrl(filePath, 60 * 60);
-        return data?.signedUrl || filePath;
-      })
-    );
-
-    res.status(200).json({ ...listing, images: signedImages, alreadyBooked });
+    res
+      .status(200)
+      .json({
+        ...listing,
+        images: toPublicUrls(listing.images),
+        alreadyBooked,
+      });
   } catch (error) {
     console.error("Error in getListingById:", error);
-    res.status(500).json({
-      message: "Internal server error",
-      error: (error as Error).message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Internal server error",
+        error: (error as Error).message,
+      });
   }
 };
 
@@ -224,33 +225,25 @@ export const getMyListings = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    const listingsWithSignedUrls = await Promise.all(
-      myListings.map(async (listing) => {
-        const signedImages = await Promise.all(
-          listing.images.map(async (filePath: string) => {
-            const { data } = await supabase.storage
-              .from(supabaseBucket)
-              .createSignedUrl(filePath, 60 * 60);
-            return data?.signedUrl || filePath;
-          })
-        );
-        return { ...listing, images: signedImages };
-      })
-    );
+    const listingsWithUrls = myListings.map((listing) => ({
+      ...listing,
+      images: toPublicUrls(listing.images),
+    }));
 
-    res.status(200).json(listingsWithSignedUrls);
+    res.status(200).json(listingsWithUrls);
   } catch (error) {
     console.error("Error in getMyListings:", error);
-    res.status(500).json({
-      message: "Internal server error",
-      error: (error as Error).message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Internal server error",
+        error: (error as Error).message,
+      });
   }
 };
 
 /**
  * Edit a listing (Owner only)
- * Allows adding and removing images
  */
 export const editListing = async (req: EditListingRequest, res: Response) => {
   try {
@@ -264,46 +257,32 @@ export const editListing = async (req: EditListingRequest, res: Response) => {
       removeImages,
     } = req.body;
 
-    if (!req.user?.userId) {
+    if (!req.user?.userId)
       return res.status(401).json({ message: "User not authenticated" });
-    }
 
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-    });
-
-    if (!listing) {
-      return res.status(404).json({ message: "Listing not found" });
-    }
-
-    if (listing.ownerId !== req.user.userId) {
+    const listing = await prisma.listing.findUnique({ where: { id } });
+    if (!listing) return res.status(404).json({ message: "Listing not found" });
+    if (listing.ownerId !== req.user.userId)
       return res.status(403).json({ message: "Unauthorized: Not the owner" });
-    }
 
-    // Normalize Multer files
     const images: Express.Multer.File[] = Array.isArray(req.files)
       ? req.files
       : (Object.values(req.files || {}).flat() as Express.Multer.File[]);
 
-    // Start with existing images
     let updatedImages: string[] = [...listing.images];
 
-    // --- Handle Image Removal ---
+    // Remove images if requested
     if (removeImages) {
       const imagesToRemove = Array.isArray(removeImages)
         ? removeImages
-        : JSON.parse(removeImages); // in case frontend sends JSON string
-
+        : JSON.parse(removeImages);
       for (const imgPath of imagesToRemove) {
-        // Delete from Supabase
         await supabase.storage.from(supabaseBucket).remove([imgPath]);
-
-        // Remove from DB array
         updatedImages = updatedImages.filter((img) => img !== imgPath);
       }
     }
 
-    // --- Handle New Image Uploads ---
+    // Upload new images
     if (images.length > 0) {
       for (const file of images) {
         const filePath = `${Date.now()}-${file.originalname}`;
@@ -311,19 +290,18 @@ export const editListing = async (req: EditListingRequest, res: Response) => {
           .from(supabaseBucket)
           .upload(filePath, file.buffer, { contentType: file.mimetype });
 
-        if (uploadError) {
-          console.error("Supabase upload error:", uploadError.message);
-          return res.status(500).json({
-            message: "Image upload failed",
-            error: uploadError.message,
-          });
-        }
+        if (uploadError)
+          return res
+            .status(500)
+            .json({
+              message: "Image upload failed",
+              error: uploadError.message,
+            });
 
         updatedImages.push(filePath);
       }
     }
 
-    // --- Update Listing (Partial Update) ---
     const updatedListing = await prisma.listing.update({
       where: { id },
       data: {
@@ -336,15 +314,19 @@ export const editListing = async (req: EditListingRequest, res: Response) => {
       },
     });
 
-    res.status(200).json({
-      message: "Listing updated successfully",
-      listing: updatedListing,
-    });
+    res
+      .status(200)
+      .json({
+        message: "Listing updated successfully",
+        listing: updatedListing,
+      });
   } catch (error) {
     console.error("Error in editListing:", error);
-    res.status(500).json({
-      message: "Internal server error",
-      error: (error as Error).message,
-    });
+    res
+      .status(500)
+      .json({
+        message: "Internal server error",
+        error: (error as Error).message,
+      });
   }
 };

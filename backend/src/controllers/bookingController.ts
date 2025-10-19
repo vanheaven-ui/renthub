@@ -6,6 +6,21 @@ import { emitBookingStatusUpdate } from "../lib/socketHelper";
 import { io } from "../socket";
 import { prisma } from "../lib/prisma";
 
+/**
+ * Helper to convert file paths to public URLs
+ */
+const toPublicUrls = (filePaths: string[] = []) => {
+  return filePaths.map((filePath) => {
+    const { data } = supabase.storage
+      .from(supabaseBucket)
+      .getPublicUrl(filePath);
+    return data.publicUrl;
+  });
+};
+
+/**
+ * Create a new booking
+ */
 export const createBooking = async (req: AuthRequest, res: Response) => {
   try {
     const { listingId, startDate, endDate } = req.body;
@@ -18,34 +33,29 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
         .status(400)
         .json({ message: "All booking fields are required." });
 
-    // Parse dates
     const start = new Date(startDate);
     const end = new Date(endDate);
     if (start >= end)
       return res.status(400).json({ message: "Invalid booking dates." });
 
-    // Fetch listing
     const listing = await prisma.listing.findUnique({
       where: { id: listingId },
     });
     if (!listing)
       return res.status(404).json({ message: "Listing not found." });
-
-    // Prevent owner from booking own listing
     if (listing.ownerId === renterId)
       return res
         .status(403)
         .json({ message: "You cannot book your own listing." });
 
-    // Check for overlapping bookings for this listing (any user)
+    // Check overlapping bookings
     const overlappingBooking = await prisma.booking.findFirst({
       where: {
         listingId,
         AND: [{ startDate: { lte: end } }, { endDate: { gte: start } }],
-        status: { in: ["PENDING", "CONFIRMED"] }, // consider only active bookings
+        status: { in: ["PENDING", "CONFIRMED"] },
       },
     });
-
     if (overlappingBooking) {
       return res.status(400).json({
         message: `This listing is already booked from ${overlappingBooking.startDate.toDateString()} to ${overlappingBooking.endDate.toDateString()}. Please choose different dates.`,
@@ -53,13 +63,11 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Calculate total price
     const dayCount = Math.ceil(
       (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
     );
     const totalPrice = dayCount * listing.pricePerDay;
 
-    // Create booking
     const newBooking = await prisma.booking.create({
       data: {
         listingId,
@@ -83,6 +91,9 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // Convert images to public URLs
+    newBooking.listing.images = toPublicUrls(newBooking.listing.images);
+
     // Emit event to owner
     io.to(listing.ownerId).emit("newBooking", {
       bookingId: newBooking.id,
@@ -104,6 +115,9 @@ export const createBooking = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Get bookings of current user (as renter or owner)
+ */
 export const getMyBookings = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -129,25 +143,12 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: "desc" },
     });
 
-    const processedBookings = await Promise.all(
-      bookings.map(async (booking) => {
-        if (booking.listing?.images?.length) {
-          const signedImages = await Promise.all(
-            booking.listing.images.map(async (filePath: string) => {
-              const { data, error } = await supabase.storage
-                .from(supabaseBucket)
-                .createSignedUrl(filePath, 60 * 60);
-              return data?.signedUrl || filePath;
-            })
-          );
-          return {
-            ...booking,
-            listing: { ...booking.listing, images: signedImages },
-          };
-        }
-        return booking;
-      })
-    );
+    const processedBookings = bookings.map((booking) => {
+      if (booking.listing?.images?.length) {
+        booking.listing.images = toPublicUrls(booking.listing.images);
+      }
+      return booking;
+    });
 
     res.status(200).json(processedBookings);
   } catch (error) {
@@ -156,6 +157,9 @@ export const getMyBookings = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Get booking by listing
+ */
 export const getBookingByListing = async (req: Request, res: Response) => {
   try {
     const { listingId } = req.params;
@@ -172,23 +176,19 @@ export const getBookingByListing = async (req: Request, res: Response) => {
     if (!booking) return res.status(404).json({ error: "Booking not found" });
 
     if (booking.listing?.images?.length) {
-      const signedImages = await Promise.all(
-        booking.listing.images.map(async (filePath: string) => {
-          const { data, error } = await supabase.storage
-            .from(supabaseBucket)
-            .createSignedUrl(filePath, 60 * 60);
-          return data?.signedUrl || filePath;
-        })
-      );
-      booking.listing.images = signedImages;
+      booking.listing.images = toPublicUrls(booking.listing.images);
     }
 
     res.status(200).json(booking);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch booking" });
+    console.error("Error fetching booking by listing:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };
 
+/**
+ * Get booking by ID
+ */
 export const getBookingById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -206,22 +206,13 @@ export const getBookingById = async (req: AuthRequest, res: Response) => {
 
     if (!booking)
       return res.status(404).json({ message: "Booking not found." });
-    if (booking.renterId !== userId && booking.ownerId !== userId) {
+    if (booking.renterId !== userId && booking.ownerId !== userId)
       return res
         .status(403)
         .json({ message: "Not authorized to view this booking." });
-    }
 
     if (booking.listing?.images?.length) {
-      const signedImages = await Promise.all(
-        booking.listing.images.map(async (filePath: string) => {
-          const { data, error } = await supabase.storage
-            .from(supabaseBucket)
-            .createSignedUrl(filePath, 60 * 60);
-          return data?.signedUrl || filePath;
-        })
-      );
-      booking.listing.images = signedImages;
+      booking.listing.images = toPublicUrls(booking.listing.images);
     }
 
     res.status(200).json(booking);
@@ -231,6 +222,9 @@ export const getBookingById = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/**
+ * Update booking status (owner only)
+ */
 export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -243,9 +237,8 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Status is required." });
 
     const validStatuses = Object.values(BookingStatus);
-    if (!validStatuses.includes(status)) {
+    if (!validStatuses.includes(status))
       return res.status(400).json({ message: "Invalid booking status." });
-    }
 
     const booking = await prisma.booking.findUnique({ where: { id } });
     if (!booking)
@@ -267,10 +260,12 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
 
     emitBookingStatusUpdate(booking.renterId, updatedBooking.id, status);
 
-    res.status(200).json({
-      message: `Booking status updated to ${status}.`,
-      booking: updatedBooking,
-    });
+    res
+      .status(200)
+      .json({
+        message: `Booking status updated to ${status}.`,
+        booking: updatedBooking,
+      });
   } catch (error) {
     console.error("Error updating booking status:", error);
     res.status(500).json({ message: "Internal server error." });
