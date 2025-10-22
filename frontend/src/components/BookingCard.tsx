@@ -34,16 +34,24 @@ const BookingCard = ({
 
   const isRenter = user?.id === booking.renterId;
   const isOwner = user?.id === booking.ownerId;
-  const showPaymentButton = isRenter && booking.paymentStatus === "PENDING";
-  const showOwnerButtons = isOwner && booking.status === "PENDING";
-  const isPaymentComplete = booking.paymentStatus === "PAID";
 
-  let displayedStatus: BookingStatusEnum;
   const bookingEndDate = new Date(booking.endDate);
   const today = new Date();
   const isDueOrPast =
     isPast(bookingEndDate) || isSameDay(bookingEndDate, today);
 
+  // ✅ Updated logic for showing Pay button
+  const showPaymentButton =
+    isRenter &&
+    (
+      (booking.status === "PENDING" && !isDueOrPast) ||
+      (booking.status === "CONFIRMED" && booking.paymentStatus === "PENDING")
+    );
+
+  const showOwnerButtons = isOwner && booking.status === "PENDING";
+  const isPaymentComplete = booking.paymentStatus === "PAID";
+
+  let displayedStatus: BookingStatusEnum;
   if (isPaymentComplete && isDueOrPast) {
     displayedStatus = "COMPLETED";
   } else {
@@ -228,6 +236,7 @@ const BookingCard = ({
           className="mt-6 flex flex-col space-y-4 flex-shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* ✅ Updated condition used here */}
           {!isDisabled && showPaymentButton && (
             <button
               onClick={() => onCheckoutClick(booking.id)}

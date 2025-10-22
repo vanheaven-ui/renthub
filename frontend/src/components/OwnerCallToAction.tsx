@@ -1,6 +1,6 @@
 "use client";
 
-import { SparklesIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
+import { HomeModernIcon, ArrowRightIcon } from "@heroicons/react/24/outline"; // Updated import
 import Link from "next/link";
 import { motion } from "framer-motion";
 
@@ -9,7 +9,8 @@ const MotionLink = motion(Link);
 const OwnerCallToAction = () => (
   <section className="py-20 px-6 bg-gradient-to-r from-blue-600 to-purple-600 relative overflow-hidden">
     <div className="max-w-6xl mx-auto text-center relative z-10">
-      <SparklesIcon className="w-16 h-16 text-yellow-300 mx-auto mb-4" />
+      <HomeModernIcon className="w-16 h-16 text-yellow-300 mx-auto mb-4" />{" "}
+      {/* Updated icon usage */}
       <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-4 leading-tight">
         Become a <span className="text-pink-300">RentHub Host</span>
       </h2>
@@ -17,7 +18,6 @@ const OwnerCallToAction = () => (
         Have a villa, apartment, or cottage in Uganda? List your property with
         us and start generating passive income today.
       </p>
-
       {/* Modern Link without legacyBehavior */}
       <MotionLink
         href="/register"

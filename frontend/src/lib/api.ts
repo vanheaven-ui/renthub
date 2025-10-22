@@ -236,20 +236,19 @@ export const createReview = async (
   listingId: string,
   payload: { rating: number; comment?: string }
 ): Promise<Review> => {
-  const res: AxiosResponse<ApiResponse<Review>> = await api.post(
-    `/api/listings/${listingId}/reviews`,
-    payload
-  );
-  return res.data.data;
+  const data = { ...payload, listingId };
+  const res: AxiosResponse<Review> = await api.post(`/api/reviews`, data);
+  return res.data;
 };
 
 export const getListingReviews = async (
   listingId: string
 ): Promise<Review[]> => {
-  const res: AxiosResponse<ApiResponse<Review[]>> = await api.get(
-    `/api/listings/${listingId}/reviews`
+  const res: AxiosResponse<Review[]> = await api.get(
+    `/api/reviews/${listingId}`
   );
-  return res.data.data;
+
+  return res.data;
 };
 
 // ----------------- PAYMENTS / OTP -----------------

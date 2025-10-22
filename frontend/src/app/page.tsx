@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
@@ -129,6 +129,29 @@ const HomePage = () => {
       window.scrollTo({ top: y, behavior: "smooth" });
     }
   }, []);
+
+  // Fix: Changed the first argument of replaceState from '' to null
+  useEffect(() => {
+    // Check if the URL hash is set to '#listings'
+    if (window.location.hash === "#listings") {
+      // Wait a moment for Next.js to finish rendering/hydrating the page
+      const timer = setTimeout(() => {
+        scrollToListings();
+      }, 50); // Small delay to ensure ref.current is calculated correctly
+
+      // Clean up the hash from the URL immediately after scrolling
+      if (window.history.replaceState) {
+        // 🐛 FIX APPLIED: Use null instead of '' for the state object to avoid TypeError
+        window.history.replaceState(
+          null,
+          document.title,
+          window.location.pathname + window.location.search
+        );
+      }
+
+      return () => clearTimeout(timer);
+    }
+  }, [scrollToListings]);
 
   if (listingsLoading || myListingsLoading)
     return <LoadingScreen message="Loading the RentHub experience..." />;

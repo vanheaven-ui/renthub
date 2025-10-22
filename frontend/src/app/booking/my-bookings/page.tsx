@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 
 import {
@@ -46,12 +46,17 @@ const ExploreIcon = () => (
 const MyBookingsPage = () => {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook to read query parameters
   const queryClient = useQueryClient();
+  const highlightedRef = useRef<HTMLDivElement>(null); // Ref for scrolling
 
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [modalBooking, setModalBooking] = useState<Booking | null>(null);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [highlightedBookingId, setHighlightedBookingId] = useState<
+    string | null
+  >(null); // State for the booking to visually highlight
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["myBookings", user?.id ?? ""],
@@ -59,24 +64,13 @@ const MyBookingsPage = () => {
     enabled: !!user,
   });
 
-  // 👇 FIX APPLIED: Stabilize the bookingIds array by using the actual bookings data
+  // 👇 Stabilize the bookingIds array
   const bookingIds = useMemo(
     () => bookings?.map((b) => b.id) ?? [],
     [bookings]
-    // NOTE: While `bookings` still forces a new array when the data updates,
-    // React Query's built-in memoization of the `data` result (which is `bookings`)
-    // generally prevents this from being an *infinite* loop, only an unnecessary re-fetch
-    // upon data change. However, for a safer, more idiomatic fix,
-    // we use `bookings` and rely on React Query's stability.
-    // **The actual fix for the infinite loop is often in how the useQuery's queryKey is derived.**
-    // Since the structure below is standard, we ensure `bookingIds` is correct.
   );
 
   const { data: unreadCounts } = useQuery<UnreadCount[]>({
-    // Using `JSON.stringify(bookingIds)` ensures the query key only changes
-    // when the *content* of the IDs changes, not just the array reference,
-    // but this is often overkill. We trust React Query to handle arrays correctly.
-    // The key is the dependency on `bookingIds` being stable.
     queryKey: ["unreadMessagesBatch", bookingIds],
     queryFn: async () =>
       bookingIds.length > 0 ? getUnreadMessagesBatch(bookingIds) : [],
@@ -172,6 +166,113 @@ const MyBookingsPage = () => {
     },
   });
 
+  // Logic to calculate booking details for the active chat
+  const bookingDetails = useMemo<BookingDetails | null>(() => {
+    const activeBookingItem = bookings?.find((b) => b.id === activeBookingId);
+    if (!activeBookingItem) return null;
+
+    return {
+      id: activeBookingItem.id,
+      listingId: activeBookingItem.listingId,
+      renterId: activeBookingItem.renterId,
+      renterName:
+        user?.id === activeBookingItem.ownerId
+          ? activeBookingItem.renter?.name ?? "Renter"
+          : user?.name ?? "You",
+      renterProfile:
+        user?.id === activeBookingItem.ownerId
+          ? activeBookingItem.renter?.profilePicture ?? null
+          : user?.profilePicture ?? null,
+      ownerId: activeBookingItem.ownerId,
+      paymentStatus: activeBookingItem.paymentStatus,
+      ownerName:
+        user?.id === activeBookingItem.ownerId
+          ? user.name ?? "You"
+          : activeBookingItem.listing?.owner?.name ?? "Owner",
+      ownerProfile:
+        user?.id === activeBookingItem.ownerId
+          ? user.profilePicture ?? null
+          : activeBookingItem.listing?.owner?.profilePicture ?? null,
+      startDate: activeBookingItem.startDate,
+      endDate: activeBookingItem.endDate,
+      status: activeBookingItem.status,
+      totalPrice: activeBookingItem.totalPrice,
+    };
+  }, [activeBookingId, bookings, user]);
+
+  const getThemeClass = (booking: Booking) => {
+    // Theme for CONFIRMED but PENDING PAYMENT (Urgency/Warning)
+    if (booking.paymentStatus === "PENDING" && booking.status === "CONFIRMED")
+      return "from-rose-50 via-orange-100 to-amber-50 border-rose-200 ring-rose-300";
+
+    // Theme for CONFIRMED and PAID (Success/Ready)
+    if (booking.paymentStatus === "PAID" && booking.status === "CONFIRMED")
+      return "from-teal-50 via-emerald-100 to-green-50 border-emerald-300 ring-emerald-400";
+
+    // Theme for COMPLETED and PAID (Archive/Done)
+    if (booking.paymentStatus === "PAID" && booking.status === "COMPLETED")
+      return "from-indigo-50 via-fuchsia-100 to-cyan-50 border-indigo-200 ring-indigo-300";
+
+    // Default or PENDING status
+    return "from-gray-50 via-slate-100 to-gray-50 border-gray-200 ring-gray-300";
+  };
+
+  // VVVV MOVED THESE DECLARATIONS UP TO FIX THE BLOCK SCOPE ERROR VVVV
+  const totalPages = Math.ceil((bookings?.length ?? 0) / ITEMS_PER_PAGE);
+  const paginatedBookings = bookings?.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+  // ^^^^ MOVED THESE DECLARATIONS UP TO FIX THE BLOCK SCOPE ERROR ^^^^
+
+  // --- NEW LOGIC: Read Query Parameter and Set Highlighted Booking ---
+  useEffect(() => {
+    if (bookings && bookings.length > 0) {
+      const listingId = searchParams.get("listingId");
+      if (listingId) {
+        // Find the specific booking associated with this listing ID
+        const matchedBooking = bookings.find((b) => b.listingId === listingId);
+
+        if (matchedBooking) {
+          setHighlightedBookingId(matchedBooking.id);
+
+          // Calculate which page the booking is on and switch to it
+          const index = bookings.findIndex((b) => b.id === matchedBooking.id);
+          const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
+
+          if (targetPage !== currentPage) {
+            // NOTE: setCurrentPage will trigger a re-render and re-calculate of paginatedBookings
+            setCurrentPage(targetPage);
+          }
+
+          // Optionally, remove the query param from the URL after processing
+          router.replace("/my-bookings", undefined);
+        }
+      }
+    }
+    // Only re-run when bookings load, the search params change, or the page changes (for logic consistency)
+  }, [bookings, searchParams, currentPage, router]);
+
+  // --- NEW LOGIC: Scroll to Highlighted Booking when element is rendered ---
+  // The 'paginatedBookings' dependency is now safe because it is declared above.
+  useEffect(() => {
+    // This effect runs whenever the highlight state is set or the paginated list changes
+    if (highlightedBookingId && highlightedRef.current) {
+      // Ensure the scroll happens after the browser has finished rendering the element
+      // (especially important if currentPage changed in the previous effect)
+      setTimeout(() => {
+        highlightedRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 100);
+
+      // Optional: Remove highlight after a delay for a "flash" effect
+      setTimeout(() => setHighlightedBookingId(null), 5000);
+    }
+    // Dependency on paginatedBookings (derived state) helps ensure this runs after pagination renders
+  }, [highlightedBookingId, paginatedBookings]);
+
   useEffect(() => {
     if (!bookings || !user) return;
 
@@ -228,93 +329,7 @@ const MyBookingsPage = () => {
   const handleCheckout = (booking: Booking) =>
     router.push(`/booking/${booking.id}/checkout`);
 
-  const activeBooking = bookings?.find((b) => b.id === activeBookingId);
-  // const bookingDetails: BookingDetails | null = activeBooking
-  //   ? {
-  //       id: activeBooking.id,
-  //       listingId: activeBooking.listingId,
-  //       renterId: activeBooking.renterId,
-  //       renterName:
-  //         user?.id === activeBooking.ownerId
-  //           ? activeBooking.renter?.name ?? "Renter"
-  //           : user?.name ?? "You",
-  //       renterProfile:
-  //         user?.id === activeBooking.ownerId
-  //           ? activeBooking.renter?.profilePicture ?? null
-  //           : user?.profilePicture ?? null,
-  //       ownerId: activeBooking.ownerId,
-  //       paymentStatus: activeBooking.paymentStatus,
-  //       ownerName:
-  //         user?.id === activeBooking.ownerId
-  //           ? user.name ?? "You"
-  //           : activeBooking.listing?.owner?.name ?? "Owner",
-  //       ownerProfile:
-  //         user?.id === activeBooking.ownerId
-  //           ? user.profilePicture ?? null
-  //           : activeBooking.listing?.owner?.profilePicture ?? null,
-  //       startDate: activeBooking.startDate,
-  //       endDate: activeBooking.endDate,
-  //       status: activeBooking.status,
-  //       totalPrice: activeBooking.totalPrice,
-  //     }
-  //   : null;
-
-  // Add this after the activeBooking computation
-  const bookingDetails = useMemo<BookingDetails | null>(() => {
-    const activeBookingItem = bookings?.find((b) => b.id === activeBookingId);
-    if (!activeBookingItem) return null;
-
-    return {
-      id: activeBookingItem.id,
-      listingId: activeBookingItem.listingId,
-      renterId: activeBookingItem.renterId,
-      renterName:
-        user?.id === activeBookingItem.ownerId
-          ? activeBookingItem.renter?.name ?? "Renter"
-          : user?.name ?? "You",
-      renterProfile:
-        user?.id === activeBookingItem.ownerId
-          ? activeBookingItem.renter?.profilePicture ?? null
-          : user?.profilePicture ?? null,
-      ownerId: activeBookingItem.ownerId,
-      paymentStatus: activeBookingItem.paymentStatus,
-      ownerName:
-        user?.id === activeBookingItem.ownerId
-          ? user.name ?? "You"
-          : activeBookingItem.listing?.owner?.name ?? "Owner",
-      ownerProfile:
-        user?.id === activeBookingItem.ownerId
-          ? user.profilePicture ?? null
-          : activeBookingItem.listing?.owner?.profilePicture ?? null,
-      startDate: activeBookingItem.startDate,
-      endDate: activeBookingItem.endDate,
-      status: activeBookingItem.status,
-      totalPrice: activeBookingItem.totalPrice,
-    };
-  }, [activeBookingId, bookings, user]); // Stable deps: won't recompute unless these change
-
-  const getThemeClass = (booking: Booking) => {
-    // Theme for CONFIRMED but PENDING PAYMENT (Urgency/Warning)
-    if (booking.paymentStatus === "PENDING" && booking.status === "CONFIRMED")
-      return "from-rose-50 via-orange-100 to-amber-50 border-rose-200 ring-rose-300";
-
-    // Theme for CONFIRMED and PAID (Success/Ready)
-    if (booking.paymentStatus === "PAID" && booking.status === "CONFIRMED")
-      return "from-teal-50 via-emerald-100 to-green-50 border-emerald-300 ring-emerald-400";
-
-    // Theme for COMPLETED and PAID (Archive/Done)
-    if (booking.paymentStatus === "PAID" && booking.status === "COMPLETED")
-      return "from-indigo-50 via-fuchsia-100 to-cyan-50 border-indigo-200 ring-indigo-300";
-
-    // Default or PENDING status
-    return "from-gray-50 via-slate-100 to-gray-50 border-gray-200 ring-gray-300";
-  };
-
-  const totalPages = Math.ceil((bookings?.length ?? 0) / ITEMS_PER_PAGE);
-  const paginatedBookings = bookings?.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
+  // const activeBooking = bookings?.find((b) => b.id === activeBookingId);
 
   if (!user) return null;
   if (isLoading) return <LoadingScreen message="Loading your bookings..." />;
@@ -345,11 +360,11 @@ const MyBookingsPage = () => {
             whileTap={{ scale: 0.95 }}
             onClick={() => router.push("/#listings")}
             className="fixed left-4 top-1/2 -translate-y-1/2 z-50 
-                       px-8 py-4 bg-gradient-to-br from-pink-500 to-purple-600 
-                       text-white font-extrabold text-lg rounded-full 
-                       shadow-xl shadow-pink-500/50 
-                       transition-all duration-300 ease-in-out 
-                       transform-gpu hover:shadow-2xl flex items-center gap-3 whitespace-nowrap"
+                        px-8 py-4 bg-gradient-to-br from-pink-500 to-purple-600 
+                        text-white font-extrabold text-lg rounded-full 
+                        shadow-xl shadow-pink-500/50 
+                        transition-all duration-300 ease-in-out 
+                        transform-gpu hover:shadow-2xl flex items-center gap-3 whitespace-nowrap"
           >
             <motion.div
               animate={{ rotate: [0, -10, 10, -10, 0] }}
@@ -367,13 +382,20 @@ const MyBookingsPage = () => {
             // WRAPPER motion.div applies the theme and animation
             <motion.div
               key={booking.id}
+              // Set the ref for scrolling if this is the highlighted booking
+              ref={booking.id === highlightedBookingId ? highlightedRef : null}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ scale: 1.02 }}
               // APPLYING THE THEME CLASS HERE
               className={`relative rounded-3xl border-4 shadow-xl p-0.5 bg-gradient-to-br ${getThemeClass(
                 booking
-              )} transition-transform`}
+              )} transition-transform duration-500 ${
+                // Conditional highlighting for the linked booking
+                booking.id === highlightedBookingId
+                  ? "ring-8 ring-pink-500/50 shadow-2xl scale-[1.05]" // Strong visual indicator
+                  : ""
+              }`}
             >
               {/* Optional: Add a subtle overlay for completed bookings */}
               {booking.paymentStatus === "PAID" &&

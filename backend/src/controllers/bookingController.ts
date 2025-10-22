@@ -197,7 +197,11 @@ export const getBookingById = async (req: AuthRequest, res: Response) => {
     const booking = await prisma.booking.findUnique({
       where: { id },
       include: {
-        listing: true,
+        listing: {
+          include: {
+            reviews: true,
+          },
+        },
         renter: true,
         owner: true,
         messages: { orderBy: { createdAt: "asc" } },

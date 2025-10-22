@@ -7,10 +7,11 @@ import { getBookingById, updateBookingDates } from "@/lib/api";
 import { Booking, BookingDetails, BookingStatus } from "@/types";
 import LoadingScreen from "@/components/LoadingScreen";
 import Image from "next/image";
-import { format, isPast, isSameDay } from "date-fns"; // Import date-fns utilities
+import { format, isPast, isSameDay } from "date-fns"; 
 import toast from "react-hot-toast";
 import { formatNumber } from "@/lib/formatNumbers";
-import { CheckBadgeIcon } from "@heroicons/react/24/solid"; // Icon for the paid indicator
+import { CheckBadgeIcon } from "@heroicons/react/24/solid"; 
+import { ReviewForm } from "@/components/ReviewForm";
 
 const STATUS_ORDER: BookingStatus[] = [
   "PENDING",
@@ -29,6 +30,7 @@ const BookingDetailsPage = () => {
   const [editMode, setEditMode] = useState(false);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [hasReviewed, setHasReviewed] = useState(false);
 
   const {
     data: booking,
@@ -39,6 +41,8 @@ const BookingDetailsPage = () => {
     queryFn: () => getBookingById(bookingId),
     enabled: !!bookingId,
   });
+
+  console.log(booking)
 
   const bookingDetails: BookingDetails | null = booking
     ? {
@@ -289,6 +293,15 @@ const BookingDetailsPage = () => {
           )}
           {/* 🌟 END MODIFIED BUTTON LOGIC */}
         </div>
+
+        {/* --- Review Form Rendering (using imported component) --- */}
+        {isBookingCompleted && !hasReviewed && (
+          <ReviewForm
+            setHasReviewed={setHasReviewed}
+            listingId={bookingDetails.listingId}
+          />
+        )}
+        {/* --- END Review Form Rendering --- */}
 
         {/* Status Timeline */}
         <div className="mt-8 flex items-center justify-between relative">
