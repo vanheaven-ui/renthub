@@ -64,7 +64,11 @@ const CheckoutPage = () => {
   });
 
   // ----------------- OTP Verification -----------------
-  const verifyMutation = useMutation<VerifyOtpResponse, Error, VerifyOtpPayload>({
+  const verifyMutation = useMutation<
+    VerifyOtpResponse,
+    Error,
+    VerifyOtpPayload
+  >({
     mutationFn: ({ bookingId, otp }) => verifyOtp({ bookingId, otp }),
     onSuccess: () => {
       toast.success("Payment completed successfully!");
@@ -74,7 +78,7 @@ const CheckoutPage = () => {
       queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
       setTimeout(() => router.push(`/user/bookings/${bookingId}`), 2500);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err?.message || "Invalid OTP.");
       setOtpErrorShake(true);
       setTimeout(() => setOtpErrorShake(false), 600);
@@ -243,7 +247,8 @@ const CheckoutPage = () => {
                   1. Your Contact Details
                 </h3>
                 <p className="text-gray-600">
-                  We'll use this information to simulate your Mobile Money
+                  {/* FIX: Replaced ' with &apos; on line 250 */}
+                  We&apos;ll use this information to simulate your Mobile Money
                   payment.
                 </p>
                 <div className="space-y-4">
@@ -312,8 +317,9 @@ const CheckoutPage = () => {
                     </p>
                   )}
                   <p className="text-xs text-yellow-700 mt-1">
-                    In reality, this OTP would be sent to the user’s email or
-                    mobile money number.
+                    {/* FIX: Replaced ' with &apos; on line 319 */}
+                    In reality, this OTP would be sent to the user&apos;s email
+                    or mobile money number.
                   </p>
                 </div>
 
@@ -365,12 +371,11 @@ const CheckoutPage = () => {
                   Payment Confirmed! 🚀
                 </h3>
                 <p className="text-gray-600 mb-8">
-                  You’ll be redirected to your bookings shortly.
+                  {/* FIX: Replaced ' with &apos; on line 372 */}
+                  You&apos;ll be redirected to your bookings shortly.
                 </p>
                 <button
-                  onClick={() =>
-                    router.push(`/booking/my-bookings`)
-                  }
+                  onClick={() => router.push(`/booking/my-bookings`)}
                   className="success-button-full max-w-xs mx-auto"
                 >
                   View My Bookings

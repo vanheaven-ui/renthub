@@ -217,7 +217,7 @@ const BookingChat = ({
       pages: data.pages.map((page) => ({
         ...page,
         messages: page.messages.map((msg) =>
-          msg.id === tempId || (msg as any).tempId === tempId ? newMsg : msg
+          msg.id === tempId ? newMsg : msg
         ),
       })),
     };

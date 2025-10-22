@@ -3,12 +3,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getListingById, createReview } from "@/lib/api";
 import { Listing } from "@/types";
-import { Formik, Form, Field, ErrorMessage } from "formik";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/context/AuthProvider";
-import { StarIcon } from "@heroicons/react/24/solid";
 import {
-  UserCircleIcon,
   XMarkIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -18,7 +15,6 @@ import Link from "next/link";
 import { useState } from "react";
 import LoadingScreen from "@/components/LoadingScreen";
 import ImageWithLoader from "@/components/ImageWithLoader";
-import { ReviewSchema } from "@/validation/review";
 import { formatNumber } from "@/lib/formatNumbers";
 
 // 💰 Styled UGX Badge
@@ -46,13 +42,6 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
   } = useQuery<Listing>({
     queryKey: ["listing", id],
     queryFn: () => getListingById(id),
-  });
-
-  const mutation = useMutation({
-    mutationFn: (values: { rating: number; comment?: string }) =>
-      createReview(id, values),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["listing", id] }),
   });
 
   if (isLoading) return <LoadingScreen message="Loading listing details..." />;
@@ -228,7 +217,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
           </div>
 
           {/* Owner & Reviews */}
-          {/* ... keep the same as previous version */}
+          {/* to be implemented */}
         </div>
       </div>
     </div>

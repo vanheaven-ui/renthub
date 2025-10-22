@@ -1,4 +1,4 @@
-import { socket, connectSocket, disconnectSocket } from "@/lib/socket";
+import { socket, connectSocket } from "@/lib/socket";
 import {
   Message,
   SendMessagePayload,
@@ -76,7 +76,7 @@ export const onUserTyping = (callback: (payload: TypingPayload) => void) => {
 export const onUserStopTyping = (
   callback: (payload: TypingPayload) => void
 ) => {
-  socket.on("userStopTyping", callback); // Align with backend emit
+  socket.on("userStopTyping", callback); 
   return () => socket.off("userStopTyping", callback);
 };
 
