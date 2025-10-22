@@ -15,6 +15,7 @@ import {
   OnlineStatus,
   SendMessagePayload,
   User,
+  UnreadCount,
 } from "@/types";
 import {
   XMarkIcon,
@@ -22,7 +23,7 @@ import {
   ArrowUpIcon,
 } from "@heroicons/react/24/outline";
 import { CheckIcon as CheckIconSolid } from "@heroicons/react/20/solid";
-import * as chatService from "@/services/chatService"; // Assuming this is @/lib/chatService
+import * as chatService from "@/services/chatService";
 import { useAuth } from "@/app/context/AuthProvider";
 import {
   getBookingMessages,
@@ -52,11 +53,25 @@ const BookingChat = ({
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Ref used to avoid re-running socket effect when isScrolledToBottom changes
+  const isScrolledToBottomRef = useRef(true);
+  const userIdRef = useRef<string | undefined>(undefined);
+
+  const markReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
   const [newMessage, setNewMessage] = useState("");
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [isUserOnline, setIsUserOnline] = useState(false);
   const [lastSeen, setLastSeen] = useState<string | null>(null);
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
+
+  // Mirror user id into ref to keep socket handlers stable without depending on `user`
+  useEffect(() => {
+    console.log("Setting userIdRef:", user?.id);
+    userIdRef.current = user?.id;
+  }, [user?.id]);
 
   const otherUserId =
     user && bookingDetails
@@ -67,35 +82,65 @@ const BookingChat = ({
 
   const isReady = !!user && !!bookingDetails && !!otherUserId;
 
-  // -------------------- FETCH MESSAGES --------------------
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useInfiniteQuery<PaginatedMessages, Error>({
-      queryKey: ["bookingMessages", bookingId],
-      queryFn: async ({ pageParam = 1 }) =>
-        getBookingMessages(bookingId, pageParam as number),
-      getNextPageParam: (lastPage) =>
-        lastPage.hasMore ? lastPage.nextPage : undefined,
-      initialPageParam: 1,
-      enabled: isReady,
-      staleTime: Infinity,
-    });
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch: refetchMessages,
+  } = useInfiniteQuery<PaginatedMessages, Error>({
+    queryKey: ["bookingMessages", bookingId],
+    queryFn: async ({ pageParam = 1 }) =>
+      getBookingMessages(bookingId, pageParam as number),
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextPage : undefined,
+    initialPageParam: 1,
+    enabled: isReady,
+    staleTime: Infinity,
+    // avoid automatic refetch that can trigger cycles
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
 
   const messages: MessageWithDelivered[] =
     data?.pages.flatMap((page) => page.messages) ?? [];
   const groupedMessages = groupMessagesByDate(messages);
 
-  // -------------------- MARK AS READ --------------------
+  // Mutation for marking messages as read
   const markReadMutation = useMutation({
     mutationFn: () => markMessagesAsRead(bookingId),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["unreadMessagesBatch"] }),
+    onSuccess: () => {
+      // Instead of invalidate (which refetches), directly update the unread count to 0
+      // Uses partial queryKey to match ["unreadMessagesBatch", bookingIds]
+      queryClient.setQueryData(
+        ["unreadMessagesBatch"],
+        (old: UnreadCount[] | undefined) =>
+          old
+            ? old.map((item) =>
+                item.bookingId === bookingId
+                  ? { ...item, unreadCount: 0 }
+                  : item
+              )
+            : old
+      );
+    },
   });
 
+  // Call markRead once when chat opens (debounced behavior for incoming messages handled in socket)
   useEffect(() => {
-    if (isReady) markReadMutation.mutate();
-  }, [bookingId, isReady, markReadMutation]);
+    if (!isReady) return;
+    // Mark as read once when ready (component mounted for this booking)
+    markReadMutation.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, isReady]);
 
-  // -------------------- SEND MESSAGE --------------------
+  // Keep a stable wrapper to call the mutate function from handlers without depending on the object
+  const markReadMutate = useRef(markReadMutation.mutate);
+  useEffect(() => {
+    console.log("Updating markReadMutate ref");
+    markReadMutate.current = markReadMutation.mutate;
+  }, [markReadMutation.mutate]);
+
   const sendMessageMutation = useMutation({
     mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
       sendMessageHttp(payload),
@@ -118,14 +163,12 @@ const BookingChat = ({
     },
   });
 
-  // -------------------- FETCH OTHER USER --------------------
   const { data: otherUserProfileData } = useQuery<User>({
     queryKey: ["otherUserProfile", otherUserId],
     queryFn: () => getUserProfile(otherUserId!),
     enabled: isReady,
   });
 
-  // -------------------- ONLINE STATUS --------------------
   const { data: initialOnlineStatusData } = useQuery<OnlineStatus>({
     queryKey: ["userOnlineStatus", otherUserId],
     queryFn: () => getUserOnlineStatus(otherUserId!),
@@ -134,8 +177,10 @@ const BookingChat = ({
   });
 
   useEffect(() => {
-    if (!initialOnlineStatusData) return;
+    if (!initialOnlineStatusData || !otherUserId) return;
     const { isOnline, lastSeen } = initialOnlineStatusData;
+
+    console.log("Initial online status:", isOnline, lastSeen);
     setIsUserOnline(isOnline);
     setLastSeen(
       !isOnline && lastSeen
@@ -148,20 +193,52 @@ const BookingChat = ({
           })
         : null
     );
-  }, [initialOnlineStatusData]);
 
-  // -------------------- SOCKET CONNECTION & LISTENERS --------------------
+    const offlineTime =
+      !initialOnlineStatusData.isOnline && initialOnlineStatusData.lastSeen
+        ? Date.now() - new Date(initialOnlineStatusData.lastSeen).getTime()
+        : 0;
+    if (offlineTime > 5 * 60 * 1000) {
+      queryClient.refetchQueries({
+        queryKey: ["userOnlineStatus", otherUserId],
+      });
+    }
+  }, [initialOnlineStatusData, otherUserId, queryClient]);
+
+  const hasSetupRef = useRef(false);
+
+  const replaceTempInCache = (
+    data: InfiniteData<PaginatedMessages>,
+    tempId: string,
+    newMsg: MessageWithDelivered
+  ): InfiniteData<PaginatedMessages> => {
+    return {
+      ...data,
+      pages: data.pages.map((page) => ({
+        ...page,
+        messages: page.messages.map((msg) =>
+          msg.id === tempId || (msg as any).tempId === tempId ? newMsg : msg
+        ),
+      })),
+    };
+  };
+
+  // Socket listeners and stable behavior
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || hasSetupRef.current) return;
 
-    // 1. Ensure socket is connected (The parent component should handle this,
-    // but it doesn't hurt to ensure it's initialized if not already)
-    chatService.initSocket();
+    hasSetupRef.current = true;
 
-    // 2. Join the specific room
+    console.log(
+      "BookingChat: Setting up socket listeners for bookingId",
+      bookingId
+    );
+
+    // ensure we join the booking room once per bookingId
     chatService.joinBookingRoom(bookingId);
 
-    // 3. Register listeners
+    console.log(`[CHAT] Joined room: ${bookingId} (user: ${user?.id})`);
+
     const offNewMessage = chatService.onNewMessage((message) => {
       queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
         ["bookingMessages", bookingId],
@@ -175,8 +252,16 @@ const BookingChat = ({
           );
           if (isDuplicate) return old;
 
-          // Mark as read if the message is from the other user
-          if (message.senderId !== user.id) markReadMutation.mutate();
+          // If the message is from the other user, schedule a debounced mark-as-read
+          if (message.senderId !== userIdRef.current) {
+            // debounce marking read to avoid many rapid API calls
+            if (markReadDebounceRef.current)
+              clearTimeout(markReadDebounceRef.current);
+            markReadDebounceRef.current = setTimeout(() => {
+              markReadMutate.current();
+              markReadDebounceRef.current = null;
+            }, 350); // 350ms debounce, tweak as needed
+          }
 
           const updated = {
             ...old,
@@ -186,19 +271,30 @@ const BookingChat = ({
             ],
           };
 
-          if (isScrolledToBottom) setTimeout(scrollToBottom, 100);
+          // Use ref to check scroll state to avoid adding it to deps
+          if (isScrolledToBottomRef.current) {
+            setTimeout(scrollToBottom, 100);
+          }
 
           return updated;
         }
       );
+      console.log(`[CHAT] Received newMessage:`, message);
+
+      if (!message.id || message.id === message.tempId) {
+        // Temp or invalid
+        setTimeout(() => refetchMessages(), 1000);
+      }
     });
 
-    const offTyping = chatService.onUserTyping(() =>
-      setIsOtherUserTyping(true)
-    );
-    const offStopTyping = chatService.onUserStopTyping(() =>
-      setIsOtherUserTyping(false)
-    );
+    const offTyping = chatService.onUserTyping(() => {
+      setIsOtherUserTyping(true);
+      console.log("[CHAT] Received userTyping");
+    });
+    const offStopTyping = chatService.onUserStopTyping(() => {
+      setIsOtherUserTyping(false);
+      console.log("[CHAT] Received userStopTyping");
+    });
 
     const offOnline = chatService.onUserOnlineStatus((data) => {
       if (data.userId === otherUserId) {
@@ -215,29 +311,42 @@ const BookingChat = ({
             : null
         );
       }
+      console.log(
+        `[CHAT] Received userOnlineStatus: userId=${data.userId}, isOnline=${data.isOnline}`
+      );
     });
 
-    // 4. Cleanup: Remove listeners and leave the room, but DO NOT disconnect the global socket.
+    // 👇 NEW: Listener for replacing temp message with real DB version
+    const offReplace = chatService.onReplaceTempMessage(
+      ({ tempId, message }) => {
+        console.log("[CHAT] Received replaceTempMessage:", tempId, message);
+        queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+          ["bookingMessages", bookingId],
+          (old) => (old ? replaceTempInCache(old, tempId, message) : old)
+        );
+      }
+    );
+
     return () => {
       offNewMessage();
       offTyping();
       offStopTyping();
       offOnline();
+      offReplace(); // 👇 NEW: Cleanup for replace listener
+      // clear debounced mark-read if any
+      if (markReadDebounceRef.current) {
+        clearTimeout(markReadDebounceRef.current);
+        markReadDebounceRef.current = null;
+      }
       chatService.leaveBookingRoom(bookingId);
-      // ❌ REMOVED: chatService.closeSocket();
-      // This component MUST NOT disconnect the entire global socket.
+      hasSetupRef.current = false;
     };
-  }, [
-    bookingId,
-    isReady,
-    otherUserId,
-    user?.id,
-    isScrolledToBottom,
-    markReadMutation,
-    queryClient,
-  ]);
 
-  // -------------------- INPUT HANDLERS --------------------
+    // Deliberately only depend on bookingId, isReady, otherUserId
+    // so this effect doesn't re-run for transient refs like isScrolledToBottom or mutation function identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, isReady, otherUserId, queryClient]);
+
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     setNewMessage(e.target.value);
     if (!user) return;
@@ -249,6 +358,10 @@ const BookingChat = ({
       chatService.emitStopTyping({ bookingId, userId: user.id });
       typingTimeoutRef.current = null;
     }, 1500);
+
+    console.log(
+      `[CHAT] Emitted typing: {bookingId: ${bookingId}, userId: ${user.id}}`
+    );
   };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
@@ -277,6 +390,7 @@ const BookingChat = ({
       delivered: false,
     };
 
+    // Optimistically add message to UI
     queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
       ["bookingMessages", bookingId],
       (old) =>
@@ -292,13 +406,7 @@ const BookingChat = ({
           : old
     );
 
-    // ⚠️ ISSUE: You are sending the message via both socket and HTTP.
-    // This is usually a bad pattern. Pick one. Since you have HTTP mutation
-    // with error handling, you should likely use that for reliability and
-    // rely on the server to relay the message back via socket.
-    // If you must use socket, remove the HTTP call.
-
-    // OPTION 1: Use only Socket (Optimistic Update handled above)
+    // Send via socket for immediacy (backend will persist and emit back)
     chatService.sendMessageSocket({
       bookingId,
       content,
@@ -307,16 +415,15 @@ const BookingChat = ({
       tempId,
     });
 
-    // OPTION 2: Use only HTTP (Remove this if you stick with Option 1)
-    // sendMessageMutation.mutate({
-    //     bookingId,
-    //     content,
-    //     senderId: user.id,
-    //     receiverId: otherUserId,
-    //     tempId,
-    // });
+    // Also attempt HTTP send as a fallback (optional)
+    sendMessageMutation.mutate({
+      bookingId,
+      content,
+      senderId: user.id,
+      receiverId: otherUserId,
+      tempId,
+    } as SendMessagePayload & { tempId: string });
 
-    // Clearing typing timeout/state after sending a message
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = null;
@@ -325,10 +432,11 @@ const BookingChat = ({
 
     setNewMessage("");
     setIsScrolledToBottom(true);
+    isScrolledToBottomRef.current = true;
     setTimeout(scrollToBottom, 50);
+    console.log(`[CHAT] Emitted sendMessageSocket: tempId=${tempId}`);
   };
 
-  // -------------------- SCROLL --------------------
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
@@ -337,6 +445,7 @@ const BookingChat = ({
       container.scrollHeight - container.scrollTop <=
       container.clientHeight + 20;
     setIsScrolledToBottom(isAtBottom);
+    isScrolledToBottomRef.current = isAtBottom;
 
     if (container.scrollTop < 50 && hasNextPage && !isFetchingNextPage) {
       const oldHeight = container.scrollHeight;
@@ -355,6 +464,7 @@ const BookingChat = ({
       behavior: "smooth",
     });
     setIsScrolledToBottom(true);
+    isScrolledToBottomRef.current = true;
   };
 
   if (!bookingDetails || !user) return null;
@@ -367,16 +477,13 @@ const BookingChat = ({
 
   const otherUserAvatar = otherUserProfileData?.profilePicture;
 
-  // -------------------- RENDER --------------------
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* ... rest of JSX remains the same ... */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
         onClick={onClose}
       />
       <div className="relative z-10 w-full max-w-3xl mx-auto bg-gray-100/50 border border-white/30 rounded-[3rem] shadow-lg flex flex-col h-[85vh] overflow-hidden">
-        {/* Header */}
         <div className="bg-white/70 backdrop-blur-xl p-6 rounded-t-[3rem] flex items-center justify-between border-b border-gray-200">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <div className="relative w-16 h-16">
@@ -433,7 +540,6 @@ const BookingChat = ({
           </button>
         </div>
 
-        {/* Messages */}
         <div
           ref={messagesContainerRef}
           onScroll={handleScroll}
@@ -441,7 +547,6 @@ const BookingChat = ({
         >
           {Object.entries(groupedMessages).map(([date, msgs]) => (
             <div key={date} className="relative flex flex-col gap-2">
-              {/* Date Separator */}
               <div className="flex justify-center my-2">
                 <div className="relative inline-block px-4 py-1 bg-gradient-to-r from-purple-400 via-pink-400 to-purple-500 text-white font-semibold rounded-full shadow-lg">
                   {formatDateGroup(date)}
@@ -508,7 +613,6 @@ const BookingChat = ({
           ))}
         </div>
 
-        {/* Input */}
         <form
           onSubmit={handleSubmit}
           className="flex gap-3 p-6 border-t border-gray-300 bg-white/70 backdrop-blur-xl"

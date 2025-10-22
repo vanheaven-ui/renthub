@@ -243,38 +243,39 @@ const HomePage = () => {
       {/* Listings */}
       <div
         ref={listingsRef}
-        className="container mx-auto p-6 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10"
+        className="container mx-auto p-6 relative z-10"
+        id="listings"
       >
-        <div className="lg:col-span-9">
-          <h2 className="text-3xl font-bold text-purple-800 mb-8">
-            {activeCategory
-              ? `Explore ${activeCategory}s`
-              : "All Featured Rentals"}
-          </h2>
-          <div
-            className={`grid gap-8 ${
-              filteredListings.length === 0
-                ? "grid-cols-1"
-                : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
-            }`}
-          >
-            {filteredListings.length === 0 ? (
-              <p className="col-span-full text-center text-gray-500 py-10 text-xl bg-white rounded-xl shadow-inner">
-                😔 No listings match your current filters. Try broadening your
-                search!
-              </p>
-            ) : (
-              filteredListings.map((listing) => (
+        <h2 className="text-3xl font-bold text-purple-800 mb-6">
+          {activeCategory
+            ? `Explore ${activeCategory}s`
+            : "All Featured Rentals"}
+        </h2>
+
+        {/* Horizontal scroll container */}
+        <div className="flex space-x-6 overflow-x-auto scroll-smooth px-2 py-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-purple-400 scrollbar-track-gray-100">
+          {filteredListings.length === 0 ? (
+            <p className="text-center text-gray-500 py-10 text-xl flex-shrink-0 w-full bg-white rounded-xl shadow-inner">
+              😔 No listings match your current filters. Try broadening your
+              search!
+            </p>
+          ) : (
+            filteredListings.map((listing) => (
+              <div
+                key={listing.id}
+                className="flex-none snap-start transition-transform hover:scale-105 hover:shadow-2xl cursor-pointer"
+                style={{ minWidth: "20rem", maxWidth: "24rem" }} // Adjust responsive card width
+                onClick={() => router.push(`/listing/${listing.id}`)}
+              >
                 <ListingCard
-                  key={listing.id}
                   listing={listing}
                   hoveredListing={hoveredListing}
                   setHoveredListing={setHoveredListing}
                   onClick={() => router.push(`/listing/${listing.id}`)}
                 />
-              ))
-            )}
-          </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 

@@ -61,39 +61,71 @@ export const initSocket = (httpServer: HttpServer) => {
     if (!activeUsers.has(userId)) activeUsers.set(userId, new Set());
     activeUsers.get(userId)!.add(socket.id);
     socket.join(userId);
-    io.emit("userOnlineStatus", { userId, isOnline: true });
+
+    // 👇 PATCH: Emit online with lastSeen null (online now), globally for all clients to catch
+    io.emit("userOnlineStatus", { userId, isOnline: true, lastSeen: null });
+    lastSeen.set(userId, new Date().toISOString()); // Update on connect too (active)
 
     const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
-    // Typing events (No changes needed)
+    // 👇 PATCH: Typing - Exclude sender with socket.to(), align event name to 'userStopTyping', add server log
     socket.on("typing", ({ bookingId }: TypingEvent) => {
-      socket.to(bookingId).emit("userTyping", { userId });
+      console.log(`[SERVER] Typing emit from ${userId} in room ${bookingId}`);
+      socket.to(bookingId).emit("userTyping", { userId }); // Exclude sender
       clearTimeout(typingTimeouts.get(bookingId));
       const timeout = setTimeout(() => {
-        socket.to(bookingId).emit("userStoppedTyping", { userId });
+        socket.to(bookingId).emit("userStopTyping", { userId }); // 👇 CHANGED: 'userStopTyping' (matches frontend)
         typingTimeouts.delete(bookingId);
       }, 3000);
       typingTimeouts.set(bookingId, timeout);
     });
 
-    // Send message (OPTIMIZED: DB write is decoupled)
+    // 👇 PATCH: Send message - Exclude sender for newMessage/replace, align event if needed (assume frontend 'sendMessageSocket' → rename or map), add unread reset for sender, server logs
     socket.on(
-      "sendMessage",
+      "sendMessageSocket",
       ({ bookingId, receiverId, content, tempId }: SendMessageEvent) => {
+        // 👇 CHANGED: Listen for 'sendMessageSocket' (match frontend)
         const senderId = userId;
 
-        // 1. IMMEDIATE BROADCAST (Optimistic UI)
+        // 1. IMMEDIATE BROADCAST (Optimistic UI) - Exclude sender (they have local optimistic)
         const tempMessage = {
           id: tempId || `temp-${Date.now()}`,
           bookingId,
           senderId,
           receiverId,
           content,
-          createdAt: new Date(),
+          createdAt: new Date().toISOString(), // 👇 PATCH: ISO for frontend Date parsing
+          updatedAt: new Date().toISOString(),
           read: false,
+          readAt: null,
+          delivered: false, // 👇 ADD: For UI checks
+          sender: { id: senderId, name: "", profilePicture: "" }, // Placeholder; populate from DB later
           temp: true,
         };
-        io.to(bookingId).emit("newMessage", tempMessage);
+        socket.to(bookingId).emit("newMessage", tempMessage); // 👇 CHANGED: socket.to() excludes sender
+        console.log(
+          `[SERVER] Broadcast temp newMessage to room ${bookingId} (excl. ${senderId})`
+        );
+
+        // Immediate unread bump for receiver, reset for sender
+        if (receiverId !== senderId) {
+          if (!unreadCounts.has(receiverId))
+            unreadCounts.set(receiverId, new Map());
+          const receiverMap = unreadCounts.get(receiverId)!;
+          const receiverCount = (receiverMap.get(bookingId) ?? 0) + 1;
+          receiverMap.set(bookingId, receiverCount);
+          io.to(receiverId).emit("updateUnreadCount", {
+            bookingId,
+            count: receiverCount,
+          });
+
+          // 👇 PATCH: Reset sender unread to 0 immediately
+          if (!unreadCounts.has(senderId))
+            unreadCounts.set(senderId, new Map());
+          const senderMap = unreadCounts.get(senderId)!;
+          senderMap.set(bookingId, 0);
+          socket.emit("updateUnreadCount", { bookingId, count: 0 });
+        }
 
         // 2. ASYNCHRONOUS DB WRITE (Fire-and-Forget)
         prisma.message
@@ -110,28 +142,30 @@ export const initSocket = (httpServer: HttpServer) => {
             },
           })
           .then(async (savedMessage) => {
-            // NOTE: Need to import/define 'toPublicUrl' inside this file or pass it from messageController
-            // Assuming 'toPublicUrl' is imported/defined globally for this socket context.
-            // For now, removing the logic that requires `toPublicUrl` import in `socket.ts`
-            // as it makes the replacement logic much slower. Ideally, the client handles the URL conversion
-            // or `savedMessage` is emitted with raw paths and the client converts them.
+            // 👇 PATCH: Populate sender/receiver for full MessageWithDelivered
+            const fullMessage = {
+              ...savedMessage,
+              createdAt: savedMessage.createdAt.toISOString(),
+              updatedAt: savedMessage.updatedAt.toISOString(),
+              readAt: savedMessage.readAt?.toISOString() || null,
+              sender: savedMessage.sender, // Now populated
+              receiver: savedMessage.receiver, // For completeness
+              delivered: true, // Assume delivered on save
+            };
+            console.log(
+              `[SERVER] DB saved message ${savedMessage.id}, broadcasting replace to room ${bookingId}`
+            );
 
-            // The client can infer the sender/receiver profile pictures based on its local user data.
-            // To keep this logic clean and fast, we emit the DB-saved message directly.
-            io.to(bookingId).emit("replaceTempMessage", {
+            // 👇 PATCH: Replace temp for receiver (sender can handle locally if needed)
+            socket.to(bookingId).emit("replaceTempMessage", {
               tempId,
-              message: savedMessage, // Emitting message without public URL conversion
+              message: fullMessage,
             });
-
-            // 3. Update unread count
-            if (receiverId !== senderId) {
-              if (!unreadCounts.has(receiverId))
-                unreadCounts.set(receiverId, new Map());
-              const map = unreadCounts.get(receiverId)!;
-              const count = (map.get(bookingId) ?? 0) + 1;
-              map.set(bookingId, count);
-              io.to(receiverId).emit("updateUnreadCount", { bookingId, count });
-            }
+            // Optional: Confirm to sender too (they replace optimistic)
+            socket.emit("replaceTempMessage", {
+              tempId,
+              message: fullMessage,
+            });
 
             lastSeen.set(senderId, new Date().toISOString());
           })
@@ -140,7 +174,10 @@ export const initSocket = (httpServer: HttpServer) => {
             // Emit error to sender if persistence fails
             socket.emit("sendMessageError", {
               error: "Failed to send message",
+              tempId,
             });
+            // Optional: Rollback temp on receiver if error
+            socket.to(bookingId).emit("removeTempMessage", { tempId });
           });
       }
     );
@@ -161,6 +198,11 @@ export const initSocket = (httpServer: HttpServer) => {
             where: { bookingId, receiverId, read: false },
             data: { read: true, readAt: new Date() },
           })
+          .then((result) => {
+            console.log(
+              `[SERVER] Marked ${result.count} messages as read for ${receiverId} in ${bookingId}`
+            );
+          })
           .catch((err) =>
             console.error("❌ markMessagesAsRead DB error:", err)
           );
@@ -172,18 +214,27 @@ export const initSocket = (httpServer: HttpServer) => {
     // Join booking room (No changes needed)
     socket.on("joinBookingRoom", (bookingId: string) => {
       socket.join(bookingId);
-      console.log(`User ${userId} joined room ${bookingId}`);
+      console.log(`[SERVER] User ${userId} joined room ${bookingId}`);
     });
 
-    // Disconnect (No changes needed)
+    // Disconnect (No changes needed, but add lastSeen emit)
     socket.on("disconnect", () => {
       const sockets = activeUsers.get(userId);
       if (sockets) {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
           activeUsers.delete(userId);
-          io.emit("userOnlineStatus", { userId, isOnline: false });
-          lastSeen.set(userId, new Date().toISOString());
+          // 👇 PATCH: Emit offline with lastSeen
+          const disconnectTime = new Date().toISOString();
+          lastSeen.set(userId, disconnectTime);
+          io.emit("userOnlineStatus", {
+            userId,
+            isOnline: false,
+            lastSeen: disconnectTime,
+          });
+          console.log(
+            `[SERVER] All sockets for ${userId} gone, emitted offline`
+          );
         }
       }
       typingTimeouts.forEach((timeout) => clearTimeout(timeout));

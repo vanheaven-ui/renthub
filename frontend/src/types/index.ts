@@ -82,7 +82,7 @@ export interface Booking {
   status: BookingStatus;
   paymentStatus: PaymentStatus;
   transactionId?: string | null;
-  listing?: {
+  listing: {
     id: string;
     title: string;
     location: string;
@@ -109,6 +109,7 @@ export interface BookingDetails {
   endDate: string;
   status: BookingStatus;
   totalPrice: number;
+  paymentStatus: PaymentStatus;
 }
 
 // ----------------- MESSAGES -----------------
@@ -181,6 +182,27 @@ export interface PaymentResponse {
   message: string;
   data?: {
     link?: string;
+    otp?: string;
+    transactionId?: string;
+  };
+}
+
+// ----------------- OTP VERIFICATION -----------------
+export interface VerifyOtpPayload {
+  bookingId: string;
+  otp: string;
+}
+
+export interface VerifyOtpResponse {
+  success: boolean;
+  message: string;
+  transactionId?: string; // Optional, for completed payment reference
+}
+
+export interface GenerateOtpApiResponse {
+  message: string;
+  data: {
+    otp: string;
   };
 }
 

@@ -1,202 +1,138 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { AuthRequest } from "../middleware/authMiddleware";
 import Flutterwave from "flutterwave-node-v3";
 import { prisma } from "../lib/prisma";
+import { generateOtp } from "../lib/otp";
 
 const flw = new Flutterwave(
   process.env.FLUTTERWAVE_PUBLIC_KEY as string,
   process.env.FLUTTERWAVE_SECRET_KEY as string
 );
-//   try {
-//     const { bookingId, phone_number, full_name, email } = req.body;
-//     const userId = req.user?.userId;
 
-//     if (!userId) {
-//       return res.status(401).json({ message: "User not authenticated." });
-//     }
+// ----------------- Generate OTP -----------------
+export const generatePaymentOtp = async (req: AuthRequest, res: Response) => {
+  try {
+    const { bookingId } = req.body;
+    const userId = req.user?.userId;
 
-//     // 1. Fetch the booking and listing details
-//     const booking = await prisma.booking.findUnique({
-//       where: { id: bookingId },
-//       include: {
-//         listing: true, // Include the related listing to get its owner's email
-//       },
-//     });
+    if (!userId)
+      return res.status(401).json({ message: "User not authenticated." });
 
-//     if (!booking) {
-//       return res.status(404).json({ message: "Booking not found." });
-//     }
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking)
+      return res.status(404).json({ message: "Booking not found." });
+    if (booking.renterId !== userId)
+      return res
+        .status(403)
+        .json({ message: "You are not authorized to pay for this booking." });
 
-//     // 2. Ensure the authenticated user is the one who made the booking
-//     if (booking.renterId !== userId) {
-//       return res
-//         .status(403)
-//         .json({ message: "You are not authorized to pay for this booking." });
-//     }
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
 
-//     // 3. Prepare the payment payload for Flutterwave
-//     const payload = {
-//       tx_ref: `rentals-ug-${Date.now()}-${booking.id}`,
-//       amount: booking.totalPrice.toString(),
-//       currency: "UGX", // Uganda Shillings
-//       network: "MTN", // MTN is a good starting point.
-//       fullname: full_name,
-//       phone_number: phone_number,
-//       email: email,
-//       redirect_url: process.env.FLUTTERWAVE_REDIRECT_URL,
-//     };
+    await prisma.paymentOtp.upsert({
+      where: { bookingId },
+      update: { otp, expiresAt },
+      create: { bookingId, otp, expiresAt },
+    });
 
-//     // 4. Initiate the mobile money payment using Flutterwave's SDK
-//     const response = await flw.MobileMoney.uganda(payload);
+    return res.status(200).json({
+      message: "Payment OTP generated.",
+      data: { otp },
+    });
+  } catch (error: any) {
+    console.error("Error generating OTP:", error.message);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
 
-//     if (response.status === "success") {
-//       // 5. Update the booking status to pending in your database
-//       await prisma.booking.update({
-//         where: { id: booking.id },
-//         data: {
-//           paymentStatus: "PENDING",
-//           transactionId: response.data.tx_ref, // Store Flutterwave's transaction reference
-//         },
-//       });
-
-//       // Send a success response back to the frontend
-//       return res.status(200).json({
-//         message:
-//           "Payment initiation successful. Please complete the transaction on your phone.",
-//         data: response.data,
-//       });
-//     } else {
-//       return res.status(400).json({
-//         message: "Payment initiation failed.",
-//         error: response.message,
-//       });
-//     }
-//   } catch (error) {
-//     console.error("Error initiating payment:", error);
-//     res.status(500).json({ message: "Internal server error." });
-//   }
-// };
-
+// ----------------- Initiate Payment -----------------
 export const initiatePayment = async (req: AuthRequest, res: Response) => {
   try {
     const { bookingId, phone_number, full_name, email } = req.body;
     const userId = req.user?.userId;
 
-    if (!userId) {
+    if (!userId)
       return res.status(401).json({ message: "User not authenticated." });
-    }
 
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { listing: true },
     });
-
-    if (!booking) {
+    if (!booking)
       return res.status(404).json({ message: "Booking not found." });
-    }
-
-    if (booking.renterId !== userId) {
+    if (booking.renterId !== userId)
       return res
         .status(403)
         .json({ message: "You are not authorized to pay for this booking." });
-    }
 
+    // Flutterwave payment payload
     const payload = {
       tx_ref: `rentals-ug-${Date.now()}-${booking.id}`,
       amount: booking.totalPrice.toString(),
       currency: "UGX",
       network: "MTN",
       fullname: full_name,
-      phone_number: phone_number,
-      email: email,
+      phone_number,
+      email,
       redirect_url: process.env.FLUTTERWAVE_REDIRECT_URL,
     };
 
     const response = await flw.MobileMoney.uganda(payload);
 
-    // Check for a successful redirect response
     if (
       response.status === "success" &&
       response.meta?.authorization?.redirect
     ) {
-      // 1. Update the booking status to PENDING
       await prisma.booking.update({
         where: { id: booking.id },
         data: {
           paymentStatus: "PENDING",
-          // The transaction ID may not be immediately available here, so handle this
-          // in the webhook on final confirmation
           transactionId: response.data?.flw_ref || response.data?.id,
         },
       });
 
-      // 2. Respond to the client with the redirect URL
       return res.status(200).json({
-        message: "Redirecting to payment page.",
-        data: {
-          link: response.meta.authorization.redirect,
-        },
-      });
-    } else {
-      // Handle cases where the top-level status is not 'success' or the redirect URL is missing
-      console.error(
-        "Flutterwave payment initiation failed with an unexpected response:",
-        response
-      );
-      return res.status(400).json({
-        message: "Payment initiation failed.",
-        error:
-          response.message ||
-          "An unexpected response was received from the payment provider.",
+        message: "Payment initiated. Complete on your phone.",
+        data: { link: response.meta.authorization.redirect },
       });
     }
+
+    return res
+      .status(400)
+      .json({ message: "Payment initiation failed.", error: response.message });
   } catch (error: any) {
     console.error("Error initiating payment:", error.message);
     res.status(500).json({ message: "Internal server error." });
   }
 };
 
-export const handleWebhook = async (req: Request, res: Response) => {
-  const secretHash = process.env.FLUTTERWAVE_WEBHOOK_SECRET;
-  const signature = req.headers["verif-hash"];
-
-  if (!signature || (signature as string) !== secretHash) {
-    // This request is not from Flutterwave. Reject it.
-    return res
-      .status(401)
-      .json({ status: "error", message: "Invalid webhook signature" });
-  }
-
-  // Get the event data from the request body
-  const payload = req.body;
-
+// ----------------- Verify OTP -----------------
+export const verifyOtp = async (req: AuthRequest, res: Response) => {
   try {
-    // Check if the transaction was successful
-    if (payload.status === "successful" && payload.currency === "UGX") {
-      const transactionRef = payload.txRef;
+    const { bookingId, otp } = req.body;
 
-      // Use Flutterwave's verification endpoint to be sure of the transaction's status
-      const response = await flw.Transaction.verify({ id: transactionRef });
+    const record = await prisma.paymentOtp.findUnique({ where: { bookingId } });
+    if (!record) return res.status(404).json({ message: "OTP not found." });
 
-      if (response.data.status === "successful") {
-        const booking = await prisma.booking.findFirst({
-          where: { transactionId: transactionRef },
-        });
+    if (record.expiresAt < new Date())
+      return res.status(400).json({ message: "OTP expired." });
 
-        if (booking && booking.paymentStatus !== "PAID") {
-          // Update the booking status to PAID
-          await prisma.booking.update({
-            where: { id: booking.id },
-            data: { paymentStatus: "PAID" },
-          });
-          console.log(`Booking ${booking.id} has been marked as PAID.`);
-        }
-      }
-    }
-    // Return a 200 OK status to Flutterwave to acknowledge receipt
-    res.status(200).json({ status: "success" });
+    if (record.otp !== otp)
+      return res.status(400).json({ message: "Invalid OTP." });
+
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { paymentStatus: "PAID" },
+    });
+
+    await prisma.paymentOtp.delete({ where: { bookingId } });
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Payment verified successfully." });
   } catch (error) {
-    console.error("Webhook error:", error);
-    res.status(500).json({ status: "error", message: "Internal server error" });
+    console.error("OTP verification error:", error);
+    res.status(500).json({ message: "Internal server error." });
   }
 };

@@ -7,9 +7,10 @@ import { getBookingById, updateBookingDates } from "@/lib/api";
 import { Booking, BookingDetails, BookingStatus } from "@/types";
 import LoadingScreen from "@/components/LoadingScreen";
 import Image from "next/image";
-import { format } from "date-fns";
+import { format, isPast, isSameDay } from "date-fns"; // Import date-fns utilities
 import toast from "react-hot-toast";
 import { formatNumber } from "@/lib/formatNumbers";
+import { CheckBadgeIcon } from "@heroicons/react/24/solid"; // Icon for the paid indicator
 
 const STATUS_ORDER: BookingStatus[] = [
   "PENDING",
@@ -53,8 +54,38 @@ const BookingDetailsPage = () => {
         endDate: booking.endDate,
         status: booking.status,
         totalPrice: booking.totalPrice,
+        // Add payment status for use in logic
+        paymentStatus: booking.paymentStatus,
       }
     : null;
+
+  // ----------------------------------------------------------------------
+  // LOGIC: Determine the effective status for the timeline display
+  // ----------------------------------------------------------------------
+  let effectiveStatus: BookingStatus = bookingDetails?.status as BookingStatus;
+  const isPaid = bookingDetails?.paymentStatus === "PAID";
+
+  if (bookingDetails && isPaid) {
+    const bookingEndDate = new Date(bookingDetails.endDate);
+    const today = new Date();
+
+    // Check if the end date is today or a past date
+    const isDueOrPast =
+      isPast(bookingEndDate) || isSameDay(bookingEndDate, today);
+
+    // If booking is CONFIRMED, PAID, and the end date is due/past, mark as COMPLETED
+    if (effectiveStatus === "CONFIRMED" && isDueOrPast) {
+      effectiveStatus = "COMPLETED";
+    } else if (effectiveStatus === "PENDING" && isDueOrPast) {
+      // Edge case: if booking was never CONFIRMED but is due/past AND paid, still mark as COMPLETED
+      effectiveStatus = "COMPLETED";
+    }
+  }
+
+  // The status used for the timeline logic and blur effect
+  const currentStatus = effectiveStatus;
+  const isBookingCompleted = currentStatus === "COMPLETED";
+  // ----------------------------------------------------------------------
 
   const { mutate: updateDates, isPending: isUpdating } = useMutation<
     Booking,
@@ -102,8 +133,33 @@ const BookingDetailsPage = () => {
     updateDates({ bookingId, startDate, endDate });
   };
 
+  // Custom class for the blur effect
+  const completedBlurClass = isBookingCompleted
+    ? "backdrop-blur-sm backdrop-grayscale-[0.5] transition-all duration-700"
+    : "";
+
+  // The Completed Stamp Component
+  const CompletedStamp = () => (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 transition-opacity duration-700">
+      <div className="text-9xl font-extrabold text-blue-600 opacity-20 transform -rotate-12 select-none border-8 border-blue-600 rounded-2xl p-6 shadow-2xl tracking-widest bg-white/20 backdrop-blur-sm">
+        COMPLETED
+      </div>
+    </div>
+  );
+
+  // Function to handle "Book Again"
+  const handleBookAgain = () => {
+    // Assuming you have access to the listingId and a route to the listing page
+    const listingId = bookingDetails.listingId;
+    // Navigate to the specific listing page for a new booking
+    router.push(`/listings/${listingId}`);
+    toast("Redirecting to listing to book again!", { icon: "🏡" });
+  };
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 p-6 overflow-hidden">
+    <div
+      className={`relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 p-6 overflow-hidden ${completedBlurClass}`}
+    >
       {/* 🟣 Abstract Background Shapes */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute w-[600px] h-[600px] bg-purple-200/30 rounded-full blur-3xl -top-40 -left-40 animate-statusChange"></div>
@@ -113,8 +169,11 @@ const BookingDetailsPage = () => {
 
       {/* Booking Content */}
       <div className="relative max-w-5xl mx-auto bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-8 space-y-6 border border-white/40 animate-fadeIn">
+        {/* ADDED: The Completed Stamp */}
+        {isBookingCompleted && <CompletedStamp />}
+
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push("/booking/my-bookings")}
           className="text-blue-600 hover:text-blue-800 font-semibold mb-4 transition"
         >
           &larr; Back to Bookings
@@ -137,6 +196,7 @@ const BookingDetailsPage = () => {
                   alt={`Listing image ${idx + 1}`}
                   fill
                   className="object-cover"
+                  unoptimized // Use unoptimized for better performance outside of ImageWithLoader
                 />
               </div>
             ))}
@@ -169,6 +229,7 @@ const BookingDetailsPage = () => {
                 value={startDate || bookingDetails.startDate.slice(0, 10)}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="border px-3 py-2 rounded-md"
+                disabled={isBookingCompleted} // Disable input if completed
               />
             ) : (
               <span>{formattedStartDate}</span>
@@ -183,13 +244,22 @@ const BookingDetailsPage = () => {
                 value={endDate || bookingDetails.endDate.slice(0, 10)}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="border px-3 py-2 rounded-md"
+                disabled={isBookingCompleted} // Disable input if completed
               />
             ) : (
               <span>{formattedEndDate}</span>
             )}
           </div>
 
-          {editMode ? (
+          {/* 🌟 MODIFIED BUTTON LOGIC */}
+          {isBookingCompleted ? (
+            <button
+              onClick={handleBookAgain}
+              className="mt-4 px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition font-semibold"
+            >
+              Book Again
+            </button>
+          ) : editMode ? (
             <div className="flex gap-4 mt-4">
               <button
                 onClick={handleUpdateDates}
@@ -217,12 +287,17 @@ const BookingDetailsPage = () => {
               Edit Dates
             </button>
           )}
+          {/* 🌟 END MODIFIED BUTTON LOGIC */}
         </div>
 
         {/* Status Timeline */}
         <div className="mt-8 flex items-center justify-between relative">
-          {STATUS_ORDER.map((status, idx) => {
-            const isActive = STATUS_ORDER.indexOf(bookingDetails.status) >= idx;
+          {STATUS_ORDER.filter((s) => s !== "CANCELED").map((status, idx) => {
+            // Filter out CANCELED for a linear flow
+            // Use currentStatus for the active status check
+            const currentStatusIndex = STATUS_ORDER.indexOf(currentStatus);
+            const isActive = currentStatusIndex >= idx;
+
             return (
               <div key={status} className="flex flex-col items-center z-10">
                 <div
@@ -234,24 +309,59 @@ const BookingDetailsPage = () => {
                 />
                 <span className="mt-2 text-sm font-medium">{status}</span>
 
-                {idx < STATUS_ORDER.length - 1 && (
+                {/* Connection Line and Paid Indicator */}
+                {/* Only render lines between PENDING <-> CONFIRMED and CONFIRMED <-> COMPLETED */}
+                {idx < STATUS_ORDER.length - 2 && (
+                  // Calculate the position for the connection line segment
                   <div
-                    className={`absolute top-4 h-1 ${
-                      idx === 0
-                        ? "left-[13%]"
-                        : idx === 1
-                        ? "left-[38%]"
-                        : "left-[63%]"
-                    } w-[24%] ${
-                      isActive
-                        ? "bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"
-                        : "bg-gray-300"
+                    className={`absolute top-4 h-1 w-[24%] flex justify-center items-center ${
+                      idx === 0 ? "left-[13%]" : "left-[38%]"
                     }`}
-                  />
+                  >
+                    {/* Connection line - uses Tailwind conditional classes for gradient width */}
+                    <div
+                      className={`h-1 w-full absolute transition-all duration-500 ${
+                        isActive && status !== "COMPLETED" // Only apply gradient if this step is active/confirmed
+                          ? "bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"
+                          : "bg-gray-300"
+                      }`}
+                    />
+
+                    {/* Paid Indicator on the CONFIRMED -> COMPLETED connector */}
+                    {status === "CONFIRMED" && isPaid && (
+                      <div className="relative z-20 flex flex-col items-center justify-center translate-y-[-1.25rem] translate-x-[50%]">
+                        {/* Enhanced text and styling for the PAID indicator */}
+                        <div className="flex items-center space-x-1 px-2 py-0.5 bg-green-500 rounded-lg shadow-lg">
+                          <CheckBadgeIcon className="w-5 h-5 text-white flex-shrink-0" />
+                          <span className="text-xs font-bold text-white uppercase leading-none">
+                            PAID
+                          </span>
+                        </div>
+
+                        <div className="w-8 h-8 hidden">
+                          {/* Hidden pulsing ring for a subtle effect if desired later, but currently simplified */}
+                          <span className="absolute inset-0 inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+                          <span className="absolute inset-0 inline-flex h-full w-full rounded-full bg-green-500 opacity-90" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             );
           })}
+
+          {/* CANCELED Status is a separate endpoint, not part of linear flow */}
+          {bookingDetails.status === "CANCELED" && (
+            <div key="CANCELED" className="flex flex-col items-center z-10">
+              <div
+                className={`w-8 h-8 rounded-full border-4 transition-all duration-500 ${
+                  getStatusClass("CANCELED") + " animate-statusChange"
+                }`}
+              />
+              <span className="mt-2 text-sm font-medium">CANCELED</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

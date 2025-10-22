@@ -243,10 +243,11 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
     const booking = await prisma.booking.findUnique({ where: { id } });
     if (!booking)
       return res.status(404).json({ message: "Booking not found." });
-    if (booking.ownerId !== userId)
-      return res
-        .status(403)
-        .json({ message: "Only the owner can update the booking status." });
+
+    // ----------------- 🔹 MODIFIED: allow any logged-in user -----------------
+    // Old: if (booking.ownerId !== userId) return 403
+    // New: any logged-in user can auto-update the status
+    // ------------------------------------------------------------------------
 
     const updatedBooking = await prisma.booking.update({
       where: { id },
@@ -258,14 +259,13 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // Emit update to renter
     emitBookingStatusUpdate(booking.renterId, updatedBooking.id, status);
 
-    res
-      .status(200)
-      .json({
-        message: `Booking status updated to ${status}.`,
-        booking: updatedBooking,
-      });
+    res.status(200).json({
+      message: `Booking status updated to ${status}.`,
+      booking: updatedBooking,
+    });
   } catch (error) {
     console.error("Error updating booking status:", error);
     res.status(500).json({ message: "Internal server error." });

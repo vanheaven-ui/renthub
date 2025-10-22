@@ -21,6 +21,9 @@ import {
   GenerateDescriptionPayload,
   GenerateDescriptionResponse,
   UnreadCount,
+  VerifyOtpResponse,
+  VerifyOtpPayload,
+  GenerateOtpApiResponse,
 } from "../types";
 
 // ----------------- Types -----------------
@@ -249,7 +252,7 @@ export const getListingReviews = async (
   return res.data.data;
 };
 
-// ----------------- Payments -----------------
+// ----------------- PAYMENTS / OTP -----------------
 export const initiatePayment = async (
   payload: InitiatePaymentPayload
 ): Promise<PaymentResponse> => {
@@ -258,6 +261,26 @@ export const initiatePayment = async (
     payload
   );
   return data;
+};
+
+export const verifyOtp = async (
+  payload: VerifyOtpPayload
+): Promise<VerifyOtpResponse> => {
+  const { data } = await api.post<VerifyOtpResponse>(
+    `/api/payments/verify-otp`,
+    payload
+  );
+  return data;
+};
+
+export const generatePaymentOtp = async (
+  bookingId: string
+): Promise<{ otp: string }> => {
+  const response = await api.post<GenerateOtpApiResponse>(
+    "/api/payments/generate-otp",
+    { bookingId }
+  );
+  return response.data.data;
 };
 
 // ----------------- Users -----------------
