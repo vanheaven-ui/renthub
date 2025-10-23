@@ -1,17 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useParams } from "next/navigation";
 import { getBookingById, updateBookingDates } from "@/lib/api";
-import { Booking, BookingDetails, BookingStatus } from "@/types";
+import { Booking, BookingDetails, BookingStatus, Review } from "@/types";
 import LoadingScreen from "@/components/LoadingScreen";
 import Image from "next/image";
-import { format, isPast, isSameDay } from "date-fns"; 
+import { format, isPast, isSameDay } from "date-fns";
 import toast from "react-hot-toast";
 import { formatNumber } from "@/lib/formatNumbers";
-import { CheckBadgeIcon } from "@heroicons/react/24/solid"; 
+import { CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { ReviewForm } from "@/components/ReviewForm";
+import { ReviewSubmittedCard } from "@/components/ReviewSubmittedCard";
 
 const STATUS_ORDER: BookingStatus[] = [
   "PENDING",
@@ -26,11 +27,11 @@ const BookingDetailsPage = () => {
   const queryClient = useQueryClient();
 
   const bookingId = params?.id as string;
-
   const [editMode, setEditMode] = useState(false);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [hasReviewed, setHasReviewed] = useState(false);
+  const [userReview, setUserReview] = useState<Review | null>(null);
 
   const {
     data: booking,
@@ -42,7 +43,20 @@ const BookingDetailsPage = () => {
     enabled: !!bookingId,
   });
 
-  console.log(booking)
+  useEffect(() => {
+    if (booking && booking.renterId) {
+      const reviews = booking.listing?.reviews || [];
+      const review =
+        reviews.find((r) => r.authorId === booking.renterId) || null;
+      setUserReview(review);
+      setHasReviewed(!!review);
+    }
+  }, [booking]);
+
+  // const renterId = booking?.renterId;
+  // const reviews = booking?.listing?.reviews || [];
+  // const userReview = reviews.find((r) => r.authorId === renterId);
+  // const [hasReviewed, setHasReviewed] = useState(!!userReview);
 
   const bookingDetails: BookingDetails | null = booking
     ? {
@@ -58,38 +72,28 @@ const BookingDetailsPage = () => {
         endDate: booking.endDate,
         status: booking.status,
         totalPrice: booking.totalPrice,
-        // Add payment status for use in logic
         paymentStatus: booking.paymentStatus,
       }
     : null;
 
-  // ----------------------------------------------------------------------
-  // LOGIC: Determine the effective status for the timeline display
-  // ----------------------------------------------------------------------
   let effectiveStatus: BookingStatus = bookingDetails?.status as BookingStatus;
   const isPaid = bookingDetails?.paymentStatus === "PAID";
 
   if (bookingDetails && isPaid) {
     const bookingEndDate = new Date(bookingDetails.endDate);
     const today = new Date();
-
-    // Check if the end date is today or a past date
     const isDueOrPast =
       isPast(bookingEndDate) || isSameDay(bookingEndDate, today);
 
-    // If booking is CONFIRMED, PAID, and the end date is due/past, mark as COMPLETED
     if (effectiveStatus === "CONFIRMED" && isDueOrPast) {
       effectiveStatus = "COMPLETED";
     } else if (effectiveStatus === "PENDING" && isDueOrPast) {
-      // Edge case: if booking was never CONFIRMED but is due/past AND paid, still mark as COMPLETED
       effectiveStatus = "COMPLETED";
     }
   }
 
-  // The status used for the timeline logic and blur effect
   const currentStatus = effectiveStatus;
   const isBookingCompleted = currentStatus === "COMPLETED";
-  // ----------------------------------------------------------------------
 
   const { mutate: updateDates, isPending: isUpdating } = useMutation<
     Booking,
@@ -137,12 +141,10 @@ const BookingDetailsPage = () => {
     updateDates({ bookingId, startDate, endDate });
   };
 
-  // Custom class for the blur effect
   const completedBlurClass = isBookingCompleted
     ? "backdrop-blur-sm backdrop-grayscale-[0.5] transition-all duration-700"
     : "";
 
-  // The Completed Stamp Component
   const CompletedStamp = () => (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 transition-opacity duration-700">
       <div className="text-9xl font-extrabold text-blue-600 opacity-20 transform -rotate-12 select-none border-8 border-blue-600 rounded-2xl p-6 shadow-2xl tracking-widest bg-white/20 backdrop-blur-sm">
@@ -151,11 +153,8 @@ const BookingDetailsPage = () => {
     </div>
   );
 
-  // Function to handle "Book Again"
   const handleBookAgain = () => {
-    // Assuming you have access to the listingId and a route to the listing page
     const listingId = bookingDetails.listingId;
-    // Navigate to the specific listing page for a new booking
     router.push(`/listings/${listingId}`);
     toast("Redirecting to listing to book again!", { icon: "🏡" });
   };
@@ -164,16 +163,14 @@ const BookingDetailsPage = () => {
     <div
       className={`relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-100 to-blue-100 p-6 overflow-hidden ${completedBlurClass}`}
     >
-      {/* 🟣 Abstract Background Shapes */}
+      {/* Background Shapes */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute w-[600px] h-[600px] bg-purple-200/30 rounded-full blur-3xl -top-40 -left-40 animate-statusChange"></div>
         <div className="absolute w-[500px] h-[500px] bg-pink-300/25 rounded-full blur-2xl top-1/3 -right-32 animate-unreadBounce"></div>
         <div className="absolute w-[300px] h-[300px] bg-blue-300/30 rounded-full blur-2xl bottom-0 left-1/4 animate-pulse"></div>
       </div>
 
-      {/* Booking Content */}
       <div className="relative max-w-5xl mx-auto bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-8 space-y-6 border border-white/40 animate-fadeIn">
-        {/* ADDED: The Completed Stamp */}
         {isBookingCompleted && <CompletedStamp />}
 
         <button
@@ -200,7 +197,7 @@ const BookingDetailsPage = () => {
                   alt={`Listing image ${idx + 1}`}
                   fill
                   className="object-cover"
-                  unoptimized // Use unoptimized for better performance outside of ImageWithLoader
+                  unoptimized
                 />
               </div>
             ))}
@@ -233,7 +230,7 @@ const BookingDetailsPage = () => {
                 value={startDate || bookingDetails.startDate.slice(0, 10)}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="border px-3 py-2 rounded-md"
-                disabled={isBookingCompleted} // Disable input if completed
+                disabled={isBookingCompleted}
               />
             ) : (
               <span>{formattedStartDate}</span>
@@ -248,14 +245,13 @@ const BookingDetailsPage = () => {
                 value={endDate || bookingDetails.endDate.slice(0, 10)}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="border px-3 py-2 rounded-md"
-                disabled={isBookingCompleted} // Disable input if completed
+                disabled={isBookingCompleted}
               />
             ) : (
               <span>{formattedEndDate}</span>
             )}
           </div>
 
-          {/* 🌟 MODIFIED BUTTON LOGIC */}
           {isBookingCompleted ? (
             <button
               onClick={handleBookAgain}
@@ -291,23 +287,25 @@ const BookingDetailsPage = () => {
               Edit Dates
             </button>
           )}
-          {/* 🌟 END MODIFIED BUTTON LOGIC */}
         </div>
 
-        {/* --- Review Form Rendering (using imported component) --- */}
-        {isBookingCompleted && !hasReviewed && (
-          <ReviewForm
-            setHasReviewed={setHasReviewed}
-            listingId={bookingDetails.listingId}
-          />
+        {/* --- Review Section --- */}
+        {isBookingCompleted && (
+          <div className="mt-8">
+            {hasReviewed && userReview ? (
+              <ReviewSubmittedCard review={userReview} />
+            ) : (
+              <ReviewForm
+                setHasReviewed={setHasReviewed}
+                listingId={bookingDetails.listingId}
+              />
+            )}
+          </div>
         )}
-        {/* --- END Review Form Rendering --- */}
 
         {/* Status Timeline */}
         <div className="mt-8 flex items-center justify-between relative">
           {STATUS_ORDER.filter((s) => s !== "CANCELED").map((status, idx) => {
-            // Filter out CANCELED for a linear flow
-            // Use currentStatus for the active status check
             const currentStatusIndex = STATUS_ORDER.indexOf(currentStatus);
             const isActive = currentStatusIndex >= idx;
 
@@ -322,39 +320,27 @@ const BookingDetailsPage = () => {
                 />
                 <span className="mt-2 text-sm font-medium">{status}</span>
 
-                {/* Connection Line and Paid Indicator */}
-                {/* Only render lines between PENDING <-> CONFIRMED and CONFIRMED <-> COMPLETED */}
                 {idx < STATUS_ORDER.length - 2 && (
-                  // Calculate the position for the connection line segment
                   <div
                     className={`absolute top-4 h-1 w-[24%] flex justify-center items-center ${
                       idx === 0 ? "left-[13%]" : "left-[38%]"
                     }`}
                   >
-                    {/* Connection line - uses Tailwind conditional classes for gradient width */}
                     <div
                       className={`h-1 w-full absolute transition-all duration-500 ${
-                        isActive && status !== "COMPLETED" // Only apply gradient if this step is active/confirmed
+                        isActive && status !== "COMPLETED"
                           ? "bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400"
                           : "bg-gray-300"
                       }`}
                     />
 
-                    {/* Paid Indicator on the CONFIRMED -> COMPLETED connector */}
                     {status === "CONFIRMED" && isPaid && (
                       <div className="relative z-20 flex flex-col items-center justify-center translate-y-[-1.25rem] translate-x-[50%]">
-                        {/* Enhanced text and styling for the PAID indicator */}
                         <div className="flex items-center space-x-1 px-2 py-0.5 bg-green-500 rounded-lg shadow-lg">
                           <CheckBadgeIcon className="w-5 h-5 text-white flex-shrink-0" />
                           <span className="text-xs font-bold text-white uppercase leading-none">
                             PAID
                           </span>
-                        </div>
-
-                        <div className="w-8 h-8 hidden">
-                          {/* Hidden pulsing ring for a subtle effect if desired later, but currently simplified */}
-                          <span className="absolute inset-0 inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
-                          <span className="absolute inset-0 inline-flex h-full w-full rounded-full bg-green-500 opacity-90" />
                         </div>
                       </div>
                     )}
@@ -364,7 +350,6 @@ const BookingDetailsPage = () => {
             );
           })}
 
-          {/* CANCELED Status is a separate endpoint, not part of linear flow */}
           {bookingDetails.status === "CANCELED" && (
             <div key="CANCELED" className="flex flex-col items-center z-10">
               <div

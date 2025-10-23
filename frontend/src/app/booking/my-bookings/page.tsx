@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import dynamic from "next/dynamic"; // 👈 Import dynamic for SSR protection
+import dynamic from "next/dynamic";
 
 import {
   getMyBookings,
@@ -14,7 +14,6 @@ import {
 import { socket } from "@/lib/socket";
 import { useAuth } from "@/app/context/AuthProvider";
 import BookingCard from "@/components/BookingCard";
-// import BookingChat from "@/components/BookingChat"; // 👈 REMOVED original import
 import LoadingScreen from "@/components/LoadingScreen";
 
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
@@ -28,9 +27,8 @@ import type {
 
 const ITEMS_PER_PAGE = 3;
 
-// 💡 FIX 1: Dynamically import BookingChat and disable SSR
 const BookingChat = dynamic(() => import("@/components/BookingChat"), {
-  ssr: false, // This ensures it is NEVER included in the server-side pre-render
+  ssr: false,
   loading: () => (
     <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50">
       <p className="text-white">Loading chat...</p>
@@ -38,7 +36,6 @@ const BookingChat = dynamic(() => import("@/components/BookingChat"), {
   ),
 });
 
-// --- Custom Icon SVG (Discovery/Explore Theme) ---
 const ExploreIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -62,8 +59,6 @@ const MyBookingsPage = () => {
   const highlightedRef = useRef<HTMLDivElement>(null);
 
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
-  const [modalBooking, setModalBooking] = useState<Booking | null>(null);
-  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [highlightedBookingId, setHighlightedBookingId] = useState<
     string | null
@@ -75,7 +70,6 @@ const MyBookingsPage = () => {
     enabled: !!user,
   });
 
-  // 👇 Stabilize the bookingIds array
   const bookingIds = useMemo(
     () => bookings?.map((b) => b.id) ?? [],
     [bookings]
@@ -90,10 +84,10 @@ const MyBookingsPage = () => {
 
   const unreadMap = useMemo(
     () =>
-      (unreadCounts ?? []).reduce(
-        (acc, item) => ({ ...acc, [item.bookingId]: item.unreadCount }),
-        {} as Record<string, number>
-      ),
+      (unreadCounts ?? []).reduce((acc, item) => {
+        acc[item.bookingId] = item.unreadCount;
+        return acc;
+      }, {} as Record<string, number>),
     [unreadCounts]
   );
 
@@ -145,23 +139,18 @@ const MyBookingsPage = () => {
 
   const joinRooms = useCallback(() => {
     if (socket.connected) {
-      bookingIds.forEach((id) => {
-        socket.emit("joinBookingRoom", id);
-        console.log(`[BOOKINGS] Global join room: ${id} (user: ${user?.id})`);
-      });
+      bookingIds.forEach((id) => socket.emit("joinBookingRoom", id));
     }
-  }, [bookingIds, socket.connected ? "connected" : "disconnected"]);
+  }, [bookingIds]);
 
   useEffect(() => {
     if (!user || bookingIds.length === 0) return;
 
     joinRooms();
-
-    const handleConnect = () => joinRooms();
-    socket.on("connect", handleConnect);
+    socket.on("connect", joinRooms);
 
     return () => {
-      socket.off("connect", handleConnect);
+      socket.off("connect", joinRooms);
     };
   }, [user, bookingIds, joinRooms]);
 
@@ -177,8 +166,7 @@ const MyBookingsPage = () => {
     },
   });
 
-  // Logic to calculate booking details for the active chat
-  const bookingDetails = useMemo<BookingDetails | null>(() => {
+  const bookingDetails = useMemo(() => {
     const activeBookingItem = bookings?.find((b) => b.id === activeBookingId);
     if (!activeBookingItem) return null;
 
@@ -212,82 +200,61 @@ const MyBookingsPage = () => {
   }, [activeBookingId, bookings, user]);
 
   const getThemeClass = (booking: Booking) => {
-    // Theme for CONFIRMED but PENDING PAYMENT (Urgency/Warning)
     if (booking.paymentStatus === "PENDING" && booking.status === "CONFIRMED")
       return "from-rose-50 via-orange-100 to-amber-50 border-rose-200 ring-rose-300";
-
-    // Theme for CONFIRMED and PAID (Success/Ready)
     if (booking.paymentStatus === "PAID" && booking.status === "CONFIRMED")
       return "from-teal-50 via-emerald-100 to-green-50 border-emerald-300 ring-emerald-400";
-
-    // Theme for COMPLETED and PAID (Archive/Done)
     if (booking.paymentStatus === "PAID" && booking.status === "COMPLETED")
       return "from-indigo-50 via-fuchsia-100 to-cyan-50 border-indigo-200 ring-indigo-300";
-
-    // Default or PENDING status
     return "from-gray-50 via-slate-100 to-gray-50 border-gray-200 ring-gray-300";
   };
 
   const totalPages = Math.ceil((bookings?.length ?? 0) / ITEMS_PER_PAGE);
-  const paginatedBookings = bookings?.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+  const paginatedBookings = useMemo(
+    () =>
+      bookings?.slice(
+        (currentPage - 1) * ITEMS_PER_PAGE,
+        currentPage * ITEMS_PER_PAGE
+      ) ?? [],
+    [bookings, currentPage]
   );
 
-  // --- NEW LOGIC: Read Query Parameter and Set Highlighted Booking ---
+  // Highlight booking based on query param
   useEffect(() => {
-    // 💡 FIX 2: Explicitly check if running on the client (browser)
     if (typeof window === "undefined") return;
+    if (!bookings?.length) return;
 
-    if (bookings && bookings.length > 0) {
-      const listingId = searchParams.get("listingId");
-      if (listingId) {
-        // Find the specific booking associated with this listing ID
-        const matchedBooking = bookings.find((b) => b.listingId === listingId);
+    const listingId = searchParams.get("listingId");
+    if (!listingId) return;
 
-        if (matchedBooking) {
-          setHighlightedBookingId(matchedBooking.id);
+    const matchedBooking = bookings.find((b) => b.listingId === listingId);
+    if (!matchedBooking) return;
 
-          // Calculate which page the booking is on and switch to it
-          const index = bookings.findIndex((b) => b.id === matchedBooking.id);
-          const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
+    setHighlightedBookingId(matchedBooking.id);
+    const index = bookings.findIndex((b) => b.id === matchedBooking.id);
+    const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
 
-          if (targetPage !== currentPage) {
-            // NOTE: setCurrentPage will trigger a re-render and re-calculate of paginatedBookings
-            setCurrentPage(targetPage);
-          }
+    if (targetPage !== currentPage) setCurrentPage(targetPage);
 
-          // Optionally, remove the query param from the URL after processing
-          // The use of 'replace' inside useEffect is typically safe, but this check provides extra defense.
-          router.replace("/booking/my-bookings", { scroll: false });
-        }
-      }
-    }
-    // Only re-run when bookings load, the search params change, or the page changes (for logic consistency)
+    router.replace("/booking/my-bookings", { scroll: false });
   }, [bookings, searchParams, currentPage, router]);
 
-  // --- NEW LOGIC: Scroll to Highlighted Booking when element is rendered ---
+  // Scroll to highlighted booking
   useEffect(() => {
-    // 💡 FIX 2: Explicitly check if running on the client (browser)
     if (typeof window === "undefined") return;
-
-    // This effect runs whenever the highlight state is set or the paginated list changes
     if (highlightedBookingId && highlightedRef.current) {
-      // Ensure the scroll happens after the browser has finished rendering the element
-      // (especially important if currentPage changed in the previous effect)
-      setTimeout(() => {
+      requestAnimationFrame(() =>
         highlightedRef.current?.scrollIntoView({
           behavior: "smooth",
           block: "center",
-        });
-      }, 100);
-
-      // Optional: Remove highlight after a delay for a "flash" effect
-      setTimeout(() => setHighlightedBookingId(null), 5000);
+        })
+      );
+      const timeout = setTimeout(() => setHighlightedBookingId(null), 5000);
+      return () => clearTimeout(timeout);
     }
-    // Dependency on paginatedBookings (derived state) helps ensure this runs after pagination renders
   }, [highlightedBookingId, paginatedBookings]);
 
+  // Auto-update expired bookings
   useEffect(() => {
     if (!bookings || !user) return;
 
@@ -305,7 +272,7 @@ const MyBookingsPage = () => {
         (u): u is { id: string; newStatus: "COMPLETED" | "CANCELED" } => !!u
       );
 
-    if (updates.length === 0) return;
+    if (!updates.length) return;
 
     (async () => {
       try {
@@ -340,11 +307,8 @@ const MyBookingsPage = () => {
   const handleCloseChat = () => setActiveBookingId(null);
   const handleStatusChange = (bookingId: string, status: BookingStatus) =>
     changeStatus({ bookingId, status });
-
   const handleCheckout = (booking: Booking) =>
     router.push(`/booking/${booking.id}/checkout`);
-
-  // const activeBooking = bookings?.find((b) => b.id === activeBookingId);
 
   if (!user) return null;
   if (isLoading) return <LoadingScreen message="Loading your bookings..." />;
@@ -365,7 +329,6 @@ const MyBookingsPage = () => {
           My Bookings 🗓️
         </h1>
 
-        {/* Fixed 'Browse Listings' button on the left-middle side */}
         {user?.role === "RENTER" && (
           <motion.button
             whileHover={{
@@ -374,12 +337,7 @@ const MyBookingsPage = () => {
             }}
             whileTap={{ scale: 0.95 }}
             onClick={() => router.push("/#listings")}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 
-                        px-8 py-4 bg-gradient-to-br from-pink-500 to-purple-600 
-                        text-white font-extrabold text-lg rounded-full 
-                        shadow-xl shadow-pink-500/50 
-                        transition-all duration-300 ease-in-out 
-                        transform-gpu hover:shadow-2xl flex items-center gap-3 whitespace-nowrap"
+            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 px-8 py-4 bg-gradient-to-br from-pink-500 to-purple-600 text-white font-extrabold text-lg rounded-full shadow-xl shadow-pink-500/50 transition-all duration-300 ease-in-out transform-gpu hover:shadow-2xl flex items-center gap-3 whitespace-nowrap"
           >
             <motion.div
               animate={{ rotate: [0, -10, 10, -10, 0] }}
@@ -391,28 +349,22 @@ const MyBookingsPage = () => {
           </motion.button>
         )}
 
-        {/* --- Booking Cards Grid with Wrapper --- */}
         <div className={`grid gap-6 ${gridClass} pt-10 pb-20`}>
-          {(paginatedBookings || []).map((booking) => (
-            // WRAPPER motion.div applies the theme and animation
+          {paginatedBookings.map((booking) => (
             <motion.div
               key={booking.id}
-              // Set the ref for scrolling if this is the highlighted booking
               ref={booking.id === highlightedBookingId ? highlightedRef : null}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ scale: 1.02 }}
-              // APPLYING THE THEME CLASS HERE
               className={`relative rounded-3xl border-4 shadow-xl p-0.5 bg-gradient-to-br ${getThemeClass(
                 booking
               )} transition-transform duration-500 ${
-                // Conditional highlighting for the linked booking
                 booking.id === highlightedBookingId
-                  ? "ring-8 ring-pink-500/50 shadow-2xl scale-[1.05]" // Strong visual indicator
+                  ? "ring-8 ring-pink-500/50 shadow-2xl scale-[1.05]"
                   : ""
               }`}
             >
-              {/* Optional: Add a subtle overlay for completed bookings */}
               {booking.paymentStatus === "PAID" &&
                 booking.status === "COMPLETED" && (
                   <motion.div
@@ -430,15 +382,12 @@ const MyBookingsPage = () => {
                 unreadCount={unreadMap[booking.id] ?? 0}
                 onChatClick={() => openChat(booking.id)}
                 onStatusChange={handleStatusChange}
-                // Passes the booking ID, not the object, as required by the prop signature
                 onCheckoutClick={() => handleCheckout(booking)}
               />
             </motion.div>
-            // END WRAPPER
           ))}
         </div>
 
-        {/* --- Pagination --- */}
         {totalPages > 1 && (
           <div className="flex justify-center mt-8">
             <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm">
@@ -474,10 +423,8 @@ const MyBookingsPage = () => {
             </nav>
           </div>
         )}
-        {/* --- End Pagination --- */}
       </div>
 
-      {/* --- Chat Component (Now Dynamically Imported) --- */}
       {activeBookingId && bookingDetails && (
         <BookingChat
           bookingId={activeBookingId}
@@ -485,9 +432,8 @@ const MyBookingsPage = () => {
           bookingDetails={bookingDetails}
         />
       )}
-      {/* --- End Chat Component --- */}
     </div>
   );
 };
 
-export default MyBookingsPage;
+export default dynamic(() => Promise.resolve(MyBookingsPage), { ssr: false });

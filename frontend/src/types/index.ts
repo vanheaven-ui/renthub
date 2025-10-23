@@ -88,6 +88,7 @@ export interface Booking {
     location: string;
     images: string[];
     owner?: User | null;
+    reviews?: Review[];
   };
   renter?: User | null;
   owner?: User | null;

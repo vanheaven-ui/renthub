@@ -54,6 +54,7 @@ export const initSocket = (httpServer: HttpServer) => {
   });
 
   io.on("connection", (socket) => {
+    console.log("⚙️ Initializing Socket.io server with cookie-based auth");
     const userId: string = socket.data.userId;
     console.log(`🟢 User connected: ${userId} (${socket.id})`);
 
@@ -62,47 +63,65 @@ export const initSocket = (httpServer: HttpServer) => {
     activeUsers.get(userId)!.add(socket.id);
     socket.join(userId);
 
-    // 👇 PATCH: Emit online with lastSeen null (online now), globally for all clients to catch
+    // Emit online with lastSeen null (online now), globally for all clients to catch
     io.emit("userOnlineStatus", { userId, isOnline: true, lastSeen: null });
     lastSeen.set(userId, new Date().toISOString()); // Update on connect too (active)
 
     const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
-    // 👇 PATCH: Typing - Exclude sender with socket.to(), align event name to 'userStopTyping', add server log
+    // Typing - Exclude sender with socket.to(), align event name to 'userStopTyping', add server log
     socket.on("typing", ({ bookingId }: TypingEvent) => {
       console.log(`[SERVER] Typing emit from ${userId} in room ${bookingId}`);
-      socket.to(bookingId).emit("userTyping", { userId }); // Exclude sender
-      clearTimeout(typingTimeouts.get(bookingId));
+      // Pass bookingId & userId for frontend filters
+      socket.to(bookingId).emit("userTyping", { userId, bookingId });
+
+      if (typingTimeouts.has(bookingId))
+        clearTimeout(typingTimeouts.get(bookingId)!);
       const timeout = setTimeout(() => {
-        socket.to(bookingId).emit("userStopTyping", { userId }); // 👇 CHANGED: 'userStopTyping' (matches frontend)
+        socket.to(bookingId).emit("userStopTyping", { userId, bookingId });
         typingTimeouts.delete(bookingId);
-      }, 3000);
+        console.log(`[SERVER] Auto-stop typing for ${userId} in ${bookingId}`);
+      }, 2000); // Align to 2s
       typingTimeouts.set(bookingId, timeout);
     });
 
-    // 👇 PATCH: Send message - Exclude sender for newMessage/replace, align event if needed (assume frontend 'sendMessageSocket' → rename or map), add unread reset for sender, server logs
+    // NEW: Also listen for explicit stopTyping (from frontend on send/blur)
+    socket.on("stopTyping", ({ bookingId }: TypingEvent) => {
+      if (typingTimeouts.has(bookingId)) {
+        clearTimeout(typingTimeouts.get(bookingId)!);
+        typingTimeouts.delete(bookingId);
+      }
+      socket.to(bookingId).emit("userStopTyping", { userId, bookingId });
+      console.log(
+        `[SERVER] Explicit stopTyping from ${userId} in ${bookingId}`
+      );
+    });
+
+    // Send message - Exclude sender for newMessage/replace, align event if needed (assume frontend 'sendMessageSocket' → rename or map), add unread reset for sender, server logs
     socket.on(
       "sendMessageSocket",
       ({ bookingId, receiverId, content, tempId }: SendMessageEvent) => {
-        // 👇 CHANGED: Listen for 'sendMessageSocket' (match frontend)
+        // Listen for 'sendMessageSocket' (match frontend)
         const senderId = userId;
 
         // 1. IMMEDIATE BROADCAST (Optimistic UI) - Exclude sender (they have local optimistic)
+        // Quick sender lookup for temp (non-blocking, cache if needed)
+        // For now, keep placeholder; full populates below
         const tempMessage = {
           id: tempId || `temp-${Date.now()}`,
-          bookingId,
+          bookingId, // Ensure present
           senderId,
           receiverId,
           content,
-          createdAt: new Date().toISOString(), // 👇 PATCH: ISO for frontend Date parsing
+          createdAt: new Date().toISOString(), // ISO for frontend Date parsing
           updatedAt: new Date().toISOString(),
           read: false,
           readAt: null,
-          delivered: false, // 👇 ADD: For UI checks
-          sender: { id: senderId, name: "", profilePicture: "" }, // Placeholder; populate from DB later
+          delivered: false, // For UI checks
+          sender: { id: senderId, name: "You", profilePicture: "" }, // Better placeholder
           temp: true,
         };
-        socket.to(bookingId).emit("newMessage", tempMessage); // 👇 CHANGED: socket.to() excludes sender
+        socket.to(bookingId).emit("newMessage", tempMessage); // socket.to() excludes sender
         console.log(
           `[SERVER] Broadcast temp newMessage to room ${bookingId} (excl. ${senderId})`
         );
@@ -119,7 +138,7 @@ export const initSocket = (httpServer: HttpServer) => {
             count: receiverCount,
           });
 
-          // 👇 PATCH: Reset sender unread to 0 immediately
+          // Reset sender unread to 0 immediately
           if (!unreadCounts.has(senderId))
             unreadCounts.set(senderId, new Map());
           const senderMap = unreadCounts.get(senderId)!;
@@ -142,7 +161,7 @@ export const initSocket = (httpServer: HttpServer) => {
             },
           })
           .then(async (savedMessage) => {
-            // 👇 PATCH: Populate sender/receiver for full MessageWithDelivered
+            // Populate sender/receiver for full MessageWithDelivered
             const fullMessage = {
               ...savedMessage,
               createdAt: savedMessage.createdAt.toISOString(),
@@ -151,21 +170,19 @@ export const initSocket = (httpServer: HttpServer) => {
               sender: savedMessage.sender, // Now populated
               receiver: savedMessage.receiver, // For completeness
               delivered: true, // Assume delivered on save
+              temp: false, // Mark as non-temp
+              bookingId, // Ensure
             };
             console.log(
               `[SERVER] DB saved message ${savedMessage.id}, broadcasting replace to room ${bookingId}`
             );
 
-            // 👇 PATCH: Replace temp for receiver (sender can handle locally if needed)
-            socket.to(bookingId).emit("replaceTempMessage", {
-              tempId,
-              message: fullMessage,
-            });
+            // Pass bookingId in payload for frontend filter
+            const replacePayload = { tempId, message: fullMessage };
+            // Replace temp for receiver (sender can handle locally if needed)
+            socket.to(bookingId).emit("replaceTempMessage", replacePayload);
             // Optional: Confirm to sender too (they replace optimistic)
-            socket.emit("replaceTempMessage", {
-              tempId,
-              message: fullMessage,
-            });
+            socket.emit("replaceTempMessage", replacePayload);
 
             lastSeen.set(senderId, new Date().toISOString());
           })
@@ -215,6 +232,10 @@ export const initSocket = (httpServer: HttpServer) => {
     socket.on("joinBookingRoom", (bookingId: string) => {
       socket.join(bookingId);
       console.log(`[SERVER] User ${userId} joined room ${bookingId}`);
+
+      // Emit current status for OTHER user in this booking? But since 1:1, emit own to room (receiver catches)
+      // Better: Emit global own status again on join (refreshes late listeners)
+      io.emit("userOnlineStatus", { userId, isOnline: true, lastSeen: null });
     });
 
     // Disconnect (No changes needed, but add lastSeen emit)
@@ -224,7 +245,7 @@ export const initSocket = (httpServer: HttpServer) => {
         sockets.delete(socket.id);
         if (sockets.size === 0) {
           activeUsers.delete(userId);
-          // 👇 PATCH: Emit offline with lastSeen
+          // Emit offline with lastSeen
           const disconnectTime = new Date().toISOString();
           lastSeen.set(userId, disconnectTime);
           io.emit("userOnlineStatus", {
@@ -233,11 +254,12 @@ export const initSocket = (httpServer: HttpServer) => {
             lastSeen: disconnectTime,
           });
           console.log(
-            `[SERVER] All sockets for ${userId} gone, emitted offline`
+            `[SERVER] All sockets for ${userId} gone, emitted offline at ${disconnectTime}`
           );
         }
       }
       typingTimeouts.forEach((timeout) => clearTimeout(timeout));
+      typingTimeouts.clear();
       console.log(`🔴 User disconnected: ${userId} (${socket.id})`);
     });
   });
