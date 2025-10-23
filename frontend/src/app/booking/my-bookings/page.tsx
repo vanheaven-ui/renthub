@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
+import dynamic from "next/dynamic"; // 👈 Import dynamic for SSR protection
 
 import {
   getMyBookings,
@@ -13,7 +14,7 @@ import {
 import { socket } from "@/lib/socket";
 import { useAuth } from "@/app/context/AuthProvider";
 import BookingCard from "@/components/BookingCard";
-import BookingChat from "@/components/BookingChat";
+// import BookingChat from "@/components/BookingChat"; // 👈 REMOVED original import
 import LoadingScreen from "@/components/LoadingScreen";
 
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
@@ -25,9 +26,17 @@ import type {
   UnreadCount,
 } from "@/types";
 
-export const dynamic = "force-dynamic";
-
 const ITEMS_PER_PAGE = 3;
+
+// 💡 FIX 1: Dynamically import BookingChat and disable SSR
+const BookingChat = dynamic(() => import("@/components/BookingChat"), {
+  ssr: false, // This ensures it is NEVER included in the server-side pre-render
+  loading: () => (
+    <div className="absolute inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50">
+      <p className="text-white">Loading chat...</p>
+    </div>
+  ),
+});
 
 // --- Custom Icon SVG (Discovery/Explore Theme) ---
 const ExploreIcon = () => (
@@ -48,9 +57,9 @@ const ExploreIcon = () => (
 const MyBookingsPage = () => {
   const { user } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams(); // Hook to read query parameters
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const highlightedRef = useRef<HTMLDivElement>(null); // Ref for scrolling
+  const highlightedRef = useRef<HTMLDivElement>(null);
 
   const [activeBookingId, setActiveBookingId] = useState<string | null>(null);
   const [modalBooking, setModalBooking] = useState<Booking | null>(null);
@@ -58,7 +67,7 @@ const MyBookingsPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [highlightedBookingId, setHighlightedBookingId] = useState<
     string | null
-  >(null); // State for the booking to visually highlight
+  >(null);
 
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ["myBookings", user?.id ?? ""],
@@ -219,15 +228,15 @@ const MyBookingsPage = () => {
     return "from-gray-50 via-slate-100 to-gray-50 border-gray-200 ring-gray-300";
   };
 
-  // VVVV MOVED THESE DECLARATIONS UP TO FIX THE BLOCK SCOPE ERROR VVVV
   const totalPages = Math.ceil((bookings?.length ?? 0) / ITEMS_PER_PAGE);
   const paginatedBookings = bookings?.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
-  // Read Query Parameter and Set Highlighted Booking ---
+  // --- NEW LOGIC: Read Query Parameter and Set Highlighted Booking ---
   useEffect(() => {
+    // 💡 FIX 2: Explicitly check if running on the client (browser)
     if (typeof window === "undefined") return;
 
     if (bookings && bookings.length > 0) {
@@ -244,20 +253,24 @@ const MyBookingsPage = () => {
           const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
 
           if (targetPage !== currentPage) {
-            // Update to the target page to ensure visibility
+            // NOTE: setCurrentPage will trigger a re-render and re-calculate of paginatedBookings
             setCurrentPage(targetPage);
           }
-          // Clean up the URL by removing the query parameter after processing
-          router.replace("/my-bookings", undefined);
+
+          // Optionally, remove the query param from the URL after processing
+          // The use of 'replace' inside useEffect is typically safe, but this check provides extra defense.
+          router.replace("/booking/my-bookings", { scroll: false });
         }
       }
     }
     // Only re-run when bookings load, the search params change, or the page changes (for logic consistency)
   }, [bookings, searchParams, currentPage, router]);
 
-  // Scroll to Highlighted Booking when element is rendered 
-  // The 'paginatedBookings' dependency is now safe because it is declared above.
+  // --- NEW LOGIC: Scroll to Highlighted Booking when element is rendered ---
   useEffect(() => {
+    // 💡 FIX 2: Explicitly check if running on the client (browser)
+    if (typeof window === "undefined") return;
+
     // This effect runs whenever the highlight state is set or the paginated list changes
     if (highlightedBookingId && highlightedRef.current) {
       // Ensure the scroll happens after the browser has finished rendering the element
@@ -464,7 +477,7 @@ const MyBookingsPage = () => {
         {/* --- End Pagination --- */}
       </div>
 
-      {/* --- Chat Component --- */}
+      {/* --- Chat Component (Now Dynamically Imported) --- */}
       {activeBookingId && bookingDetails && (
         <BookingChat
           bookingId={activeBookingId}
