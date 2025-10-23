@@ -1,4 +1,4 @@
-import { socket } from "@/lib/socket";
+import { socket, connectSocket } from "@/lib/socket";
 import {
   Message,
   SendMessagePayload,
@@ -26,14 +26,20 @@ interface ReplaceTempMessagePayload {
   message: MessageWithDelivered;
 }
 
+// Track joined rooms to avoid duplicates
 const joinedRooms = new Set<string>();
+
+// Keep local timeout to debounce stopTyping per user+booking
+const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
 // ---------------------------
 // Safe emit helper
 // ---------------------------
 const emitSafe = <T = unknown>(event: string, payload?: T): void => {
-  if (socket.connected) {
-    socket.emit(event, payload);
+  const s = socket?.connected ? socket : connectSocket();
+
+  if (s.connected) {
+    s.emit(event, payload);
   } else {
     console.warn(`[SOCKET] Tried to emit "${event}" but socket not connected`);
   }
@@ -62,13 +68,40 @@ export const leaveBookingRoom = (bookingId: string) => {
 export const sendMessageSocket = (
   payload: SendMessagePayload & { tempId?: string }
 ) => {
-  emitSafe("sendMessageSocket", payload); // match backend event
+  emitSafe("sendMessageSocket", payload);
 };
 
-export const emitTyping = (payload: TypingPayload) =>
+// ---------------------------
+// Typing status (debounced)
+// ---------------------------
+export const emitTyping = (payload: TypingPayload) => {
+  const key = `${payload.bookingId}:${payload.userId}`;
+
+  // Immediately emit typing
   emitSafe("typing", payload);
-export const emitStopTyping = (payload: TypingPayload) =>
+
+  // Reset any previous stopTyping timer
+  if (typingTimeouts.has(key)) {
+    clearTimeout(typingTimeouts.get(key)!);
+  }
+
+  // Schedule stopTyping after 1.5s of inactivity
+  const timeout = setTimeout(() => {
+    emitSafe("stopTyping", payload);
+    typingTimeouts.delete(key);
+  }, 1500);
+
+  typingTimeouts.set(key, timeout);
+};
+
+export const emitStopTyping = (payload: TypingPayload) => {
+  const key = `${payload.bookingId}:${payload.userId}`;
+  if (typingTimeouts.has(key)) {
+    clearTimeout(typingTimeouts.get(key)!);
+    typingTimeouts.delete(key);
+  }
   emitSafe("stopTyping", payload);
+};
 
 // ---------------------------
 // Listeners

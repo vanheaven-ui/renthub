@@ -4,7 +4,7 @@ let socket: Socket;
 
 export const connectSocket = () => {
   if (!socket || !socket.connected) {
-    socket = socketIOClient(process.env.NEXT_PUBLIC_SOCKET_URL!, {
+    socket = socketIOClient(process.env.NEXT_PUBLIC_BACKEND_URL!, {
       withCredentials: true, // Important for cookie-based auth
       autoConnect: true,     // Automatically connect on creation
       reconnection: true,    // Enable reconnection
