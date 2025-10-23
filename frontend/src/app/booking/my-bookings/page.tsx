@@ -25,6 +25,8 @@ import type {
   UnreadCount,
 } from "@/types";
 
+export const dynamic = "force-dynamic";
+
 const ITEMS_PER_PAGE = 3;
 
 // --- Custom Icon SVG (Discovery/Explore Theme) ---
@@ -223,10 +225,11 @@ const MyBookingsPage = () => {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
-  // ^^^^ MOVED THESE DECLARATIONS UP TO FIX THE BLOCK SCOPE ERROR ^^^^
 
-  // --- NEW LOGIC: Read Query Parameter and Set Highlighted Booking ---
+  // Read Query Parameter and Set Highlighted Booking ---
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     if (bookings && bookings.length > 0) {
       const listingId = searchParams.get("listingId");
       if (listingId) {
@@ -241,11 +244,10 @@ const MyBookingsPage = () => {
           const targetPage = Math.floor(index / ITEMS_PER_PAGE) + 1;
 
           if (targetPage !== currentPage) {
-            // NOTE: setCurrentPage will trigger a re-render and re-calculate of paginatedBookings
+            // Update to the target page to ensure visibility
             setCurrentPage(targetPage);
           }
-
-          // Optionally, remove the query param from the URL after processing
+          // Clean up the URL by removing the query parameter after processing
           router.replace("/my-bookings", undefined);
         }
       }
@@ -253,7 +255,7 @@ const MyBookingsPage = () => {
     // Only re-run when bookings load, the search params change, or the page changes (for logic consistency)
   }, [bookings, searchParams, currentPage, router]);
 
-  // --- NEW LOGIC: Scroll to Highlighted Booking when element is rendered ---
+  // Scroll to Highlighted Booking when element is rendered 
   // The 'paginatedBookings' dependency is now safe because it is declared above.
   useEffect(() => {
     // This effect runs whenever the highlight state is set or the paginated list changes
