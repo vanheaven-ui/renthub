@@ -53,11 +53,6 @@ const BookingDetailsPage = () => {
     }
   }, [booking]);
 
-  // const renterId = booking?.renterId;
-  // const reviews = booking?.listing?.reviews || [];
-  // const userReview = reviews.find((r) => r.authorId === renterId);
-  // const [hasReviewed, setHasReviewed] = useState(!!userReview);
-
   const bookingDetails: BookingDetails | null = booking
     ? {
         id: booking.id,
@@ -76,25 +71,51 @@ const BookingDetailsPage = () => {
       }
     : null;
 
+  // --- Booking status & dates ---
+  const bookingEndDate = bookingDetails
+    ? new Date(bookingDetails.endDate)
+    : null;
+  const today = new Date();
   let effectiveStatus: BookingStatus = bookingDetails?.status as BookingStatus;
+  const isBookingCompleted = effectiveStatus === "COMPLETED";
   const isPaid = bookingDetails?.paymentStatus === "PAID";
 
-  if (bookingDetails && isPaid) {
-    const bookingEndDate = new Date(bookingDetails.endDate);
-    const today = new Date();
-    const isDueOrPast =
-      isPast(bookingEndDate) || isSameDay(bookingEndDate, today);
+  const isDueOrPast = bookingEndDate
+    ? isPast(bookingEndDate) || isSameDay(bookingEndDate, today)
+    : false;
 
-    if (effectiveStatus === "CONFIRMED" && isDueOrPast) {
-      effectiveStatus = "COMPLETED";
-    } else if (effectiveStatus === "PENDING" && isDueOrPast) {
+  // Update effective status based on payment and end date
+  if (bookingDetails && isPaid) {
+    if (
+      (effectiveStatus === "CONFIRMED" || effectiveStatus === "PENDING") &&
+      isDueOrPast
+    ) {
       effectiveStatus = "COMPLETED";
     }
   }
 
   const currentStatus = effectiveStatus;
-  const isBookingCompleted = currentStatus === "COMPLETED";
 
+  // --- Edit/Extend logic (fully type-safe) ---
+  const isCurrentlyExtendable: boolean = Boolean(
+    bookingDetails &&
+      !isBookingCompleted &&
+      bookingEndDate &&
+      isSameDay(bookingEndDate, today) &&
+      isPaid
+  );
+
+  const isPrePaymentEditable: boolean = Boolean(
+    bookingDetails &&
+      !isDueOrPast &&
+      (bookingDetails.status === "PENDING" ||
+        (bookingDetails.status === "CONFIRMED" &&
+          bookingDetails.paymentStatus === "PENDING"))
+  );
+
+  const showEditButton: boolean = isCurrentlyExtendable || isPrePaymentEditable;
+
+  // --- Mutations ---
   const { mutate: updateDates, isPending: isUpdating } = useMutation<
     Booking,
     Error,
@@ -115,11 +136,11 @@ const BookingDetailsPage = () => {
   if (isLoading) return <LoadingScreen message="Loading booking details..." />;
   if (error)
     return <p className="text-center text-red-600 mt-10">{error.message}</p>;
-  if (!bookingDetails)
+  if (!bookingDetails || !bookingEndDate)
     return <p className="text-center mt-10">Booking not found</p>;
 
   const formattedStartDate = format(new Date(bookingDetails.startDate), "PPP");
-  const formattedEndDate = format(new Date(bookingDetails.endDate), "PPP");
+  const formattedEndDate = format(bookingEndDate, "PPP");
 
   const getStatusClass = (status: BookingStatus) => {
     switch (status) {
@@ -135,10 +156,28 @@ const BookingDetailsPage = () => {
   };
 
   const handleUpdateDates = () => {
-    if (!startDate || !endDate) return toast.error("Both dates are required.");
-    if (new Date(endDate) < new Date(startDate))
-      return toast.error("End date must be after start date.");
-    updateDates({ bookingId, startDate, endDate });
+    if (isCurrentlyExtendable) {
+      if (!endDate || new Date(endDate) <= bookingEndDate) {
+        return toast.error(
+          "To extend, the new end date must be after the current end date."
+        );
+      }
+    } else {
+      if (!startDate || !endDate)
+        return toast.error("Both dates are required.");
+      if (new Date(endDate) < new Date(startDate))
+        return toast.error("End date must be after start date.");
+    }
+
+    const finalStartDate = isCurrentlyExtendable
+      ? bookingDetails.startDate.slice(0, 10)
+      : startDate;
+
+    updateDates({
+      bookingId,
+      startDate: finalStartDate,
+      endDate,
+    });
   };
 
   const completedBlurClass = isBookingCompleted
@@ -154,8 +193,7 @@ const BookingDetailsPage = () => {
   );
 
   const handleBookAgain = () => {
-    const listingId = bookingDetails.listingId;
-    router.push(`/listings/${listingId}`);
+    router.push(`/listings/${bookingDetails.listingId}`);
     toast("Redirecting to listing to book again!", { icon: "🏡" });
   };
 
@@ -224,13 +262,13 @@ const BookingDetailsPage = () => {
 
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <label className="font-medium text-gray-700">Start Date:</label>
-            {editMode ? (
+            {editMode && !isCurrentlyExtendable ? (
               <input
                 type="date"
                 value={startDate || bookingDetails.startDate.slice(0, 10)}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="border px-3 py-2 rounded-md"
-                disabled={isBookingCompleted}
+                disabled={isBookingCompleted || isCurrentlyExtendable}
               />
             ) : (
               <span>{formattedStartDate}</span>
@@ -259,37 +297,41 @@ const BookingDetailsPage = () => {
             >
               Book Again
             </button>
-          ) : editMode ? (
-            <div className="flex gap-4 mt-4">
+          ) : showEditButton ? (
+            editMode ? (
+              <div className="flex gap-4 mt-4">
+                <button
+                  onClick={handleUpdateDates}
+                  disabled={isUpdating}
+                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                >
+                  {isUpdating ? "Saving..." : "Save"}
+                </button>
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={handleUpdateDates}
-                disabled={isUpdating}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+                onClick={() => {
+                  setEditMode(true);
+                  if (!isCurrentlyExtendable) {
+                    setStartDate(bookingDetails.startDate.slice(0, 10));
+                  }
+                  setEndDate(bookingDetails.endDate.slice(0, 10));
+                }}
+                className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
               >
-                {isUpdating ? "Saving..." : "Save"}
+                {isCurrentlyExtendable ? "Extend Booking" : "Edit Dates"}
               </button>
-              <button
-                onClick={() => setEditMode(false)}
-                className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                setEditMode(true);
-                setStartDate(bookingDetails.startDate.slice(0, 10));
-                setEndDate(bookingDetails.endDate.slice(0, 10));
-              }}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
-            >
-              Edit Dates
-            </button>
-          )}
+            )
+          ) : null}
         </div>
 
-        {/* --- Review Section --- */}
+        {/* Review Section */}
         {isBookingCompleted && (
           <div className="mt-8">
             {hasReviewed && userReview ? (
