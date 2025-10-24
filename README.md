@@ -24,7 +24,7 @@
   <img src="https://img.shields.io/badge/⚡_Tech_Stack-Next.js_+_Tailwind_+_Prisma_+_Socket.io_+_Gemini-DA70D6?style=for-the-badge&logo=stackshare&logoColor=white" alt="Tech Stack Badge" />
 </p>
 
-RentHub P2P is a cutting-edge peer-to-peer rental marketplace tailored for Uganda's vibrant real estate scene, with a focus on Kampala. Built for renters and property owners alike, it bridges the gap between traditional listings and modern, tech-driven experiences. Whether you're a student seeking affordable digs or a landlord optimizing occupancy, RentHub delivers seamless discovery, secure interactions, and innovative tools to make renting effortless and equitable.
+RentHub P2P is a cutting-edge peer-to-peer rental marketplace tailored for Uganda's vibrant real estate scene. Built for renters and property owners alike, it bridges the gap between traditional listings and modern, tech-driven experiences. Whether you're a student seeking affordable digs or a landlord optimizing occupancy, RentHub delivers seamless discovery, secure interactions, and innovative tools to make renting effortless and equitable.
 
 [Live Demo](https://renthub-p2p.vercel.app/) | [API Documentation](https://renthub-docs.vercel.app/) | [Backend API](https://renthub-1-9tnm.onrender.com/api)
 
