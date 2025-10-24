@@ -5,7 +5,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
-
+import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import Link from "next/link";
+import { ArrowLongLeftIcon } from "@heroicons/react/24/outline";
+import type { Booking, BookingStatus, UnreadCount } from "@/types";
 import {
   getMyBookings,
   getUnreadMessagesBatch,
@@ -16,17 +19,6 @@ import { useAuth } from "@/app/context/AuthProvider";
 import BookingCard from "@/components/BookingCard";
 import LoadingScreen from "@/components/LoadingScreen";
 
-import { CheckCircleIcon } from "@heroicons/react/24/solid";
-
-import type {
-  Booking,
-  BookingDetails,
-  BookingStatus,
-  UnreadCount,
-} from "@/types";
-
-const ITEMS_PER_PAGE = 3;
-
 const BookingChat = dynamic(() => import("@/components/BookingChat"), {
   ssr: false,
   loading: () => (
@@ -36,20 +28,7 @@ const BookingChat = dynamic(() => import("@/components/BookingChat"), {
   ),
 });
 
-const ExploreIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    className="w-6 h-6 transform-gpu"
-  >
-    <path
-      fillRule="evenodd"
-      d="M10.5 3.75a6.75 6.75 0 1 0 0 13.5 6.75 6.75 0 0 0 0-13.5ZM2.25 10.5a8.25 8.25 0 1 1 15.116 5.093l3.535 3.535a.75.75 0 0 1-1.06 1.06l-3.535-3.535A8.25 8.25 0 0 1 2.25 10.5Z"
-      clipRule="evenodd"
-    />
-  </svg>
-);
+const ITEMS_PER_PAGE = 3;
 
 const MyBookingsPage = () => {
   const { user } = useAuth();
@@ -330,23 +309,24 @@ const MyBookingsPage = () => {
         </h1>
 
         {user?.role === "RENTER" && (
-          <motion.button
-            whileHover={{
-              scale: 1.05,
-              boxShadow: "0 0 50px rgba(236, 72, 153, 0.9)",
-            }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => router.push("/#listings")}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 px-8 py-4 bg-gradient-to-br from-pink-500 to-purple-600 text-white font-extrabold text-lg rounded-full shadow-xl shadow-pink-500/50 transition-all duration-300 ease-in-out transform-gpu hover:shadow-2xl flex items-center gap-3 whitespace-nowrap"
-          >
+          <Link href="/#listings" passHref>
             <motion.div
-              animate={{ rotate: [0, -10, 10, -10, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="fixed top-20 left-4 md:left-10 z-30 cursor-pointer p-2 rounded-full shadow-2xl bg-white/70 backdrop-blur-sm"
+              initial={{ x: -100, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 100, delay: 0.2 }}
+              whileHover={{
+                scale: 1.05,
+                boxShadow: "0 10px 30px rgba(168, 85, 247, 0.5)",
+              }}
+              whileTap={{ scale: 0.95 }}
             >
-              <ExploreIcon />
+              <div className="flex items-center gap-1.5 p-2 pr-4 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-white font-semibold text-sm">
+                <ArrowLongLeftIcon className="w-6 h-6" />
+                <span className="hidden sm:inline">Back to Listings</span>
+              </div>
             </motion.div>
-            Browse Listings
-          </motion.button>
+          </Link>
         )}
 
         <div className={`grid gap-6 ${gridClass} pt-10 pb-20`}>
