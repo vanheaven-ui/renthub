@@ -1,4 +1,6 @@
-# RentHub P2P
+<p align="center">
+  <h1>RentHub P2P</h1>
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Built_for-Uganda's_Rental_Ecosystem-8A2BE2?style=for-the-badge&logo=react&logoColor=white" alt="Built for Uganda Badge" />
@@ -42,65 +44,6 @@ RentHub P2P packs a suite of intuitive features that prioritize user trust and e
 - **Mobile Money Payment Demo**: A realistic OTP-driven flow for MTN MoMo and Airtel Money simulations. No real funds move—focus on backend logic for OTP generation, expiration (TTL-based), and verification. Perfect for testing end-to-end security without financial risk.
 
 - **24/7 AI Rental Assistant (Hub Scout)**: Powered by Google's Gemini 2.5 Flash, this draggable, resizable chat widget offers instant expertise on Uganda rentals. Ask about neighborhood vibes in Nakasero or generate compelling listing descriptions. It's always on, always contextual, and coded client-side for snappy performance.
-
-```tsx
-// Example: HubScoutWidget Component (Client-Side AI Integration)
-"use client";
-
-import React, { useState, useEffect, useRef, FormEvent } from "react";
-import { useDraggable } from "@/hooks/useDraggable";
-import {
-  SparklesIcon,
-  XMarkIcon,
-  PaperAirplaneIcon,
-  ChatBubbleLeftRightIcon,
-  ChevronDoubleUpIcon,
-} from "@heroicons/react/24/outline";
-import { askUgandaRentalExpert, generateListingDescription } from "@/lib/api";
-import { toast } from "react-hot-toast";
-
-interface Message {
-  id: string;
-  content: string;
-  sender: "user" | "ai";
-  createdAt: string;
-}
-
-const HubScoutWidget = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
-
-  const handleToggle = () => {
-    setIsOpen(!isOpen);
-  };
-
-  return (
-    <>
-      {!isOpen && (
-        <button
-          className="fixed bottom-6 left-6 z-50 p-4 rounded-full bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 shadow-xl text-white hover:scale-110 active:scale-95 focus:outline-none focus:ring-4 focus:ring-pink-400"
-          aria-label="Launch AI Hub Scout Assistant"
-          onClick={handleToggle}
-        >
-          <div className="flex items-center space-x-2">
-            <SparklesIcon className="w-7 h-7 animate-pulse group-hover:animate-none" />
-            <span className="sr-only">Hub Scout AI</span>
-          </div>
-        </button>
-      )}
-
-      {mounted && isOpen && <DraggableChatWindow onClose={handleToggle} />}
-    </>
-  );
-};
-
-// Additional components (Resizer, DraggableChatWindow) follow...
-// Full implementation handles tabs for "Ask AI" and "Generate Description", real-time messaging, and error handling.
-
-export default HubScoutWidget;
-```
 
 - **Inline Real-Time Chat**: Powered by **Socket.io**, renters and owners connect instantly for negotiations, queries, or virtual walkthroughs. Messages sync across devices, with typing indicators and emoji support for a personal touch.
 
