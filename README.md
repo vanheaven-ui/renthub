@@ -1,5 +1,5 @@
 <p align="center">
-  <h1>RentHub P2P</h1>
+  <h1 align="center">RentHub P2P</h1>
 </p>
 
 <p align="center">
