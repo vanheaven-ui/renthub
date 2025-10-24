@@ -76,7 +76,7 @@ const CheckoutPage = () => {
       setTimeout(() => setOtpSuccessPulse(false), 1000);
       setStep(PaymentStep.Complete);
       queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
-      setTimeout(() => router.push(`/user/bookings/${bookingId}`), 2500);
+      setTimeout(() => router.push(`/booking/${bookingId}`), 2500);
     },
     onError: (err: Error) => {
       toast.error(err?.message || "Invalid OTP.");
