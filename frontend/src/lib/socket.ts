@@ -23,10 +23,9 @@ export const initSocket = (): Socket => {
   const s = connectSocket();
   // If it's the first time and autoConnect is false, we should explicitly call .connect()
   if (!s.connected) {
-    s.connect(); // Explicitly start the connection attempt
+    s.connect();
   }
   return s;
 };
 
-// Export the socket instance
 export { socket };

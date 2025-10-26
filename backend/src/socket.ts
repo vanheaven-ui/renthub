@@ -124,40 +124,8 @@ export const initSocket = (httpServer: HttpServer): Server => {
 
         const senderId = userId;
 
-        // Broadcast temp message to booking room
-        const tempMessage = {
-          id: tempId || `temp-${Date.now()}`,
-          bookingId,
-          senderId,
-          receiverId,
-          content,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          read: false,
-          delivered: false,
-          sender: { id: senderId, name: "You", profilePicture: "" },
-          temp: true,
-        };
-        socket.to(bookingId).emit("newMessage", tempMessage);
-
-        // Update unread counts
-        if (receiverId !== senderId) {
-          if (!unreadCounts.has(receiverId))
-            unreadCounts.set(receiverId, new Map());
-          const receiverMap = unreadCounts.get(receiverId)!;
-          receiverMap.set(bookingId, (receiverMap.get(bookingId) ?? 0) + 1);
-          io.to(receiverId).emit("updateUnreadCount", {
-            bookingId,
-            count: receiverMap.get(bookingId),
-          });
-
-          unreadCounts.set(senderId, unreadCounts.get(senderId) ?? new Map());
-          unreadCounts.get(senderId)!.set(bookingId, 0);
-          socket.emit("updateUnreadCount", { bookingId, count: 0 });
-        }
-
-        // Persist message in DB
         try {
+          // Persist message
           const savedMessage = await prisma.message.create({
             data: { bookingId, senderId, receiverId, content },
             include: {
@@ -179,10 +147,24 @@ export const initSocket = (httpServer: HttpServer): Server => {
             temp: false,
           };
 
-          io.to(bookingId).emit("replaceTempMessage", {
-            tempId,
+          // Emit replace to sender only
+          socket.emit("replaceTempMessage", {
+            tempId: tempId || savedMessage.id,
             message: fullMessage,
           });
+          // Emit full message to receivers only
+          socket.to(bookingId).emit("newMessage", fullMessage);
+
+          // Update unread counts
+          if (receiverId !== senderId) {
+            if (!unreadCounts.has(receiverId))
+              unreadCounts.set(receiverId, new Map());
+            const count =
+              (unreadCounts.get(receiverId)!.get(bookingId) ?? 0) + 1;
+            unreadCounts.get(receiverId)!.set(bookingId, count);
+            io.to(receiverId).emit("updateUnreadCount", { bookingId, count });
+          }
+
           lastSeen.set(senderId, new Date().toISOString());
         } catch (err) {
           console.error("❌ Message DB error:", err);
@@ -190,7 +172,6 @@ export const initSocket = (httpServer: HttpServer): Server => {
             error: "Failed to save message",
             tempId,
           });
-          socket.to(bookingId).emit("removeTempMessage", { tempId });
         }
       }
     );

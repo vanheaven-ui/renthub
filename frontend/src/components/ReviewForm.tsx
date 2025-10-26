@@ -1,3 +1,5 @@
+// components/ReviewForm.tsx (or wherever your ReviewForm is located)
+
 "use client";
 
 import { useState } from "react";
@@ -9,12 +11,15 @@ import { createReview } from "@/lib/api";
 import { Review } from "@/types";
 
 interface ReviewFormProps {
-  setHasReviewed: (value: boolean) => void;
+  // We'll remove setHasReviewed and replace it with a more explicit callback
+  // setHasReviewed: (value: boolean) => void; 
   listingId: string;
+  // NEW PROP: Callback to pass the successfully created review object to the parent
+  onReviewSubmitted: (review: Review) => void;
 }
 
 export const ReviewForm: React.FC<ReviewFormProps> = ({
-  setHasReviewed,
+  onReviewSubmitted, // Use the new prop
   listingId,
 }) => {
   const queryClient = useQueryClient();
@@ -28,12 +33,15 @@ export const ReviewForm: React.FC<ReviewFormProps> = ({
   >({
     mutationFn: (payload) => createReview(listingId, payload),
     onSuccess: (newReview) => {
-      // Optimistic UI
-      setHasReviewed(true);
+      // 1. Call the new prop, passing the full Review object to the parent
+      onReviewSubmitted(newReview); 
+      
       toast.success(
         "Review submitted successfully! Thank you for your feedback."
       );
-      queryClient.invalidateQueries({ queryKey: ["listing", listingId] });
+      // 2. Invalidate to update the listing cache for next time, but the UI is already updated via the callback.
+      queryClient.invalidateQueries({ queryKey: ["listing", listingId] }); 
+      queryClient.invalidateQueries({ queryKey: ["booking", newReview.id] }); // Invalidate the booking to ensure the `userReview` state is eventually consistent if the user refreshes/navigates back
     },
     onError: (err) => {
       toast.error(err.message || "Failed to submit review.");
@@ -52,6 +60,7 @@ export const ReviewForm: React.FC<ReviewFormProps> = ({
       key="form"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      // ADDITION: Exit animation for when the form is replaced
       exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.4 }}
       className="mt-4 p-8 bg-gray-800 rounded-3xl shadow-xl border-t-4 border-yellow-400 text-white"

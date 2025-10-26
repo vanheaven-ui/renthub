@@ -1,3 +1,4 @@
+// components/BookingChat.tsx
 "use client";
 
 import {
@@ -10,7 +11,6 @@ import {
 } from "react";
 import {
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   InfiniteData,
@@ -37,7 +37,6 @@ import {
   getUserOnlineStatus,
   getUserProfile,
   markMessagesAsRead,
-  sendMessageHttp,
 } from "@/lib/api";
 import Image from "next/image";
 import DefaultProfileIcon from "@/components/DefaultProfileIcon";
@@ -59,7 +58,6 @@ const BookingChat = ({
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const isScrolledToBottomRef = useRef(true);
   const userIdRef = useRef<string | undefined>(undefined);
   const markReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -85,32 +83,43 @@ const BookingChat = ({
 
   const isReady = !!user && !!bookingDetails && !!otherUserId;
 
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    refetch: refetchMessages,
-  } = useInfiniteQuery<PaginatedMessages, Error>({
-    queryKey: ["bookingMessages", bookingId],
-    queryFn: async ({ pageParam = 1 }) =>
-      getBookingMessages(bookingId, pageParam as number),
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.nextPage : undefined,
-    initialPageParam: 1,
-    enabled: isReady,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  });
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useInfiniteQuery<PaginatedMessages, Error>({
+      queryKey: ["bookingMessages", bookingId],
+      queryFn: async ({ pageParam }) =>
+        getBookingMessages(bookingId, pageParam as number),
+      getNextPageParam: (lastPage) =>
+        lastPage.hasMore ? lastPage.nextPage : undefined,
+      initialPageParam: undefined,
+      enabled: isReady,
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+    });
 
   const messages: MessageWithDelivered[] =
     data?.pages.flatMap((page) => page.messages) ?? [];
   const groupedMessages = groupMessagesByDate(messages);
 
-  const markReadMutation = useMutation({
-    mutationFn: () => markMessagesAsRead(bookingId),
-    onSuccess: () => {
+  const markReadMutation = useQuery({
+    queryKey: ["markRead", bookingId],
+    queryFn: () => markMessagesAsRead(bookingId),
+    enabled: isReady,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!isReady) return;
+    markReadMutation.refetch();
+  }, [bookingId, isReady, markReadMutation]);
+
+  const markReadMutate = useRef(() => markReadMutation.refetch);
+  useEffect(() => {
+    markReadMutate.current = () => markReadMutation.refetch;
+  }, [markReadMutation]);
+
+  useEffect(() => {
+    if (markReadMutation.isSuccess) {
       queryClient.setQueryData(
         ["unreadMessagesBatch"],
         (old: UnreadCount[] | undefined) =>
@@ -122,40 +131,8 @@ const BookingChat = ({
               )
             : old
       );
-    },
-  });
-
-  useEffect(() => {
-    if (!isReady) return;
-    markReadMutation.mutate();
-  }, [bookingId, isReady]);
-
-  const markReadMutate = useRef(markReadMutation.mutate);
-  useEffect(() => {
-    markReadMutate.current = markReadMutation.mutate;
-  }, [markReadMutation.mutate]);
-
-  const sendMessageMutation = useMutation({
-    mutationFn: (payload: SendMessagePayload & { tempId: string }) =>
-      sendMessageHttp(payload),
-    onError: (_, variables) => {
-      queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-        ["bookingMessages", bookingId],
-        (old) =>
-          old
-            ? {
-                ...old,
-                pages: old.pages.map((page) => ({
-                  ...page,
-                  messages: page.messages.filter(
-                    (msg) => msg.id !== variables.tempId
-                  ),
-                })),
-              }
-            : old
-      );
-    },
-  });
+    }
+  }, [markReadMutation.isSuccess, bookingId, queryClient]);
 
   const { data: otherUserProfileData } = useQuery<User>({
     queryKey: ["otherUserProfile", otherUserId],
@@ -172,11 +149,11 @@ const BookingChat = ({
 
   useEffect(() => {
     if (!initialOnlineStatusData || !otherUserId) return;
-    const { isOnline, lastSeen } = initialOnlineStatusData;
+    const { isOnline, lastSeen: ls } = initialOnlineStatusData;
     setIsUserOnline(isOnline);
     setLastSeen(
-      !isOnline && lastSeen
-        ? new Date(lastSeen).toLocaleString(undefined, {
+      !isOnline && ls
+        ? new Date(ls).toLocaleString(undefined, {
             hour: "2-digit",
             minute: "2-digit",
             hour12: true,
@@ -189,18 +166,43 @@ const BookingChat = ({
 
   const hasSetupRef = useRef(false);
 
+  // ✅ FIXED: Make sure tempId is replaced and duplicate prevented
   const replaceTempInCache = (
     data: InfiniteData<PaginatedMessages>,
     tempId: string,
     newMsg: MessageWithDelivered
   ): InfiniteData<PaginatedMessages> => {
+    const newPages = data.pages.map((page) => {
+      const tempExists = page.messages.some((m) => m.id === tempId);
+      const alreadyExists = page.messages.some((m) => m.id === newMsg.id);
+
+      const filtered = page.messages.filter(
+        (m) => m.id !== tempId && m.id !== newMsg.id
+      );
+
+      return {
+        ...page,
+        messages: [
+          ...filtered,
+          ...(tempExists || !alreadyExists ? [newMsg] : []),
+        ],
+      };
+    });
+
+    return { ...data, pages: newPages };
+  };
+
+  // --------------------------- Remove temp message from cache ------------------
+  const removeTempFromCache = (
+    data: InfiniteData<PaginatedMessages> | undefined,
+    tempId: string
+  ): InfiniteData<PaginatedMessages> | undefined => {
+    if (!data) return data;
     return {
       ...data,
       pages: data.pages.map((page) => ({
         ...page,
-        messages: page.messages.map((msg) =>
-          msg.id === tempId ? newMsg : msg
-        ),
+        messages: page.messages.filter((m) => m.id !== tempId),
       })),
     };
   };
@@ -223,12 +225,16 @@ const BookingChat = ({
             const lastPage = old.pages[old.pages.length - 1];
             if (!lastPage) return old;
 
-            const isDuplicate = old.pages.some((p) =>
+            // 🚫 Skip if it's my own message (already optimistically added)
+            if (message.senderId === userIdRef.current) return old;
+
+            // 🚫 Skip if message ID already exists
+            const exists = old.pages.some((p) =>
               p.messages.some((m) => m.id === message.id)
             );
-            if (isDuplicate) return old;
+            if (exists) return old;
 
-            if (!message.temp && message.senderId !== userIdRef.current) {
+            if (message.senderId !== userIdRef.current) {
               if (markReadDebounceRef.current)
                 clearTimeout(markReadDebounceRef.current);
               markReadDebounceRef.current = setTimeout(() => {
@@ -254,19 +260,39 @@ const BookingChat = ({
       }
     );
 
-    const offTyping = chatService.onUserTyping(
-      (data) => {
-        if (data.bookingId !== bookingId || data.userId !== otherUserId) return;
-        setIsOtherUserTyping(true);
+    const offReplace = chatService.onReplaceTempMessage(
+      ({ tempId, message }) => {
+        if (message.bookingId !== bookingId) return;
+
+        queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+          ["bookingMessages", bookingId],
+          (old) => (old ? replaceTempInCache(old, tempId, message) : old)
+        );
+
+        if (isScrolledToBottomRef.current) {
+          setTimeout(scrollToBottom, 100);
+        }
       }
     );
 
-    const offStopTyping = chatService.onUserStopTyping(
-      (data) => {
-        if (data.bookingId !== bookingId || data.userId !== otherUserId) return;
-        setIsOtherUserTyping(false);
-      }
-    );
+    const offError = chatService.onSendMessageError(({ tempId }) => {
+      queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
+        ["bookingMessages", bookingId],
+        (old) => removeTempFromCache(old, tempId)
+      );
+      // Optional: Show error toast here
+      console.error("[CHAT] Failed to send message");
+    });
+
+    const offTyping = chatService.onUserTyping((data) => {
+      if (data.bookingId !== bookingId || data.userId !== otherUserId) return;
+      setIsOtherUserTyping(true);
+    });
+
+    const offStopTyping = chatService.onUserStopTyping((data) => {
+      if (data.bookingId !== bookingId || data.userId !== otherUserId) return;
+      setIsOtherUserTyping(false);
+    });
 
     const offOnline = chatService.onUserOnlineStatus((data) => {
       if (data.userId === otherUserId) {
@@ -285,22 +311,13 @@ const BookingChat = ({
       }
     });
 
-    const offReplace = chatService.onReplaceTempMessage(
-      ({ tempId, message }) => {
-        if (message.bookingId !== bookingId) return;
-        queryClient.setQueryData<InfiniteData<PaginatedMessages>>(
-          ["bookingMessages", bookingId],
-          (old) => (old ? replaceTempInCache(old, tempId, message) : old)
-        );
-      }
-    );
-
     return () => {
       offNewMessage();
+      offReplace();
+      offError();
       offTyping();
       offStopTyping();
       offOnline();
-      offReplace();
       if (markReadDebounceRef.current) {
         clearTimeout(markReadDebounceRef.current);
         markReadDebounceRef.current = null;
@@ -358,7 +375,10 @@ const BookingChat = ({
               ...old,
               pages: old.pages.map((page, i, arr) =>
                 i === arr.length - 1
-                  ? { ...page, messages: [...page.messages, tempMessage] }
+                  ? {
+                      ...page,
+                      messages: [...page.messages, tempMessage],
+                    }
                   : page
               ),
             }
@@ -372,14 +392,6 @@ const BookingChat = ({
       receiverId: otherUserId,
       tempId,
     });
-
-    sendMessageMutation.mutate({
-      bookingId,
-      content,
-      senderId: user.id,
-      receiverId: otherUserId,
-      tempId,
-    } as SendMessagePayload & { tempId: string });
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);

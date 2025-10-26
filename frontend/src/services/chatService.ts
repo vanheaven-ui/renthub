@@ -26,10 +26,15 @@ interface ReplaceTempMessagePayload {
   message: MessageWithDelivered;
 }
 
+interface SendMessageErrorPayload {
+  error: string;
+  tempId: string;
+}
+
 // Track joined rooms to avoid duplicates
 const joinedRooms = new Set<string>();
 
-// Keep local timeout to debounce stopTyping per user+booking
+// Local timeouts for debounced typing
 const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
 // ---------------------------
@@ -37,7 +42,6 @@ const typingTimeouts = new Map<string, NodeJS.Timeout>();
 // ---------------------------
 const emitSafe = <T = unknown>(event: string, payload?: T): void => {
   const s = socket?.connected ? socket : connectSocket();
-
   if (s.connected) {
     s.emit(event, payload);
   } else {
@@ -76,21 +80,12 @@ export const sendMessageSocket = (
 // ---------------------------
 export const emitTyping = (payload: TypingPayload) => {
   const key = `${payload.bookingId}:${payload.userId}`;
-
-  // Immediately emit typing
   emitSafe("typing", payload);
-
-  // Reset any previous stopTyping timer
-  if (typingTimeouts.has(key)) {
-    clearTimeout(typingTimeouts.get(key)!);
-  }
-
-  // Schedule stopTyping after 1.5s of inactivity
+  if (typingTimeouts.has(key)) clearTimeout(typingTimeouts.get(key)!);
   const timeout = setTimeout(() => {
     emitSafe("stopTyping", payload);
     typingTimeouts.delete(key);
   }, 1500);
-
   typingTimeouts.set(key, timeout);
 };
 
@@ -104,12 +99,28 @@ export const emitStopTyping = (payload: TypingPayload) => {
 };
 
 // ---------------------------
-// Listeners
+// Listeners (auto-cleanup)
 // ---------------------------
 export const onNewMessage = (callback: (msg: NewMessagePayload) => void) => {
   const handler = (msg: Message) => callback(msg as NewMessagePayload);
   socket.on("newMessage", handler);
   return () => socket.off("newMessage", handler);
+};
+
+export const onReplaceTempMessage = (
+  callback: (payload: ReplaceTempMessagePayload) => void
+) => {
+  const handler = (payload: ReplaceTempMessagePayload) => callback(payload);
+  socket.on("replaceTempMessage", handler);
+  return () => socket.off("replaceTempMessage", handler);
+};
+
+export const onSendMessageError = (
+  callback: (payload: SendMessageErrorPayload) => void
+) => {
+  const handler = (payload: SendMessageErrorPayload) => callback(payload);
+  socket.on("sendMessageError", handler);
+  return () => socket.off("sendMessageError", handler);
 };
 
 export const onUserTyping = (callback: (payload: TypingPayload) => void) => {
@@ -134,12 +145,4 @@ export const onUserOnlineStatus = (
 export const onUpdateUnreadCount = (callback: (data: UnreadCount) => void) => {
   socket.on("updateUnreadCount", callback);
   return () => socket.off("updateUnreadCount", callback);
-};
-
-export const onReplaceTempMessage = (
-  callback: (payload: ReplaceTempMessagePayload) => void
-) => {
-  const handler = (payload: ReplaceTempMessagePayload) => callback(payload);
-  socket.on("replaceTempMessage", handler);
-  return () => socket.off("replaceTempMessage", handler);
 };
