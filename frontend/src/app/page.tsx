@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
@@ -22,6 +22,7 @@ const categories = [
   "Apartment",
   "House",
   "Villa",
+  "Guesthouse",
   "Cabin",
   "Mansion",
   "Studio",
@@ -100,24 +101,27 @@ const HomePage = () => {
     return sum + count;
   }, 0);
 
-  const filteredListings = listings.filter((l) => {
-    if (filters.category && l.category !== filters.category) return false;
-    if (filters.minPrice !== null && l.pricePerDay < filters.minPrice)
-      return false;
-    if (filters.maxPrice !== null && l.pricePerDay > filters.maxPrice)
-      return false;
-    if (
-      filters.search &&
-      !l.title.toLowerCase().includes(filters.search.toLowerCase())
-    )
-      return false;
-    if (
-      filters.location &&
-      !l.location.toLowerCase().includes(filters.location.toLowerCase())
-    )
-      return false;
-    return true;
-  });
+  // ✅ Memoized frontend filtering for instant UI response
+  const filteredListings = useMemo(() => {
+    return listings.filter((l) => {
+      if (filters.category && l.category !== filters.category) return false;
+      if (filters.minPrice !== null && l.pricePerDay < filters.minPrice)
+        return false;
+      if (filters.maxPrice !== null && l.pricePerDay > filters.maxPrice)
+        return false;
+      if (
+        filters.search &&
+        !l.title.toLowerCase().includes(filters.search.toLowerCase())
+      )
+        return false;
+      if (
+        filters.location &&
+        !l.location.toLowerCase().includes(filters.location.toLowerCase())
+      )
+        return false;
+      return true;
+    });
+  }, [listings, filters]);
 
   const scrollToListings = useCallback(() => {
     if (listingsRef.current) {
@@ -130,32 +134,22 @@ const HomePage = () => {
     }
   }, []);
 
-  // Fix: Changed the first argument of replaceState from '' to null
   useEffect(() => {
-    // Check if the URL hash is set to '#listings'
     if (window.location.hash === "#listings") {
-      // Wait a moment for Next.js to finish rendering/hydrating the page
-      const timer = setTimeout(() => {
-        scrollToListings();
-      }, 50); // Small delay to ensure ref.current is calculated correctly
-
-      // Clean up the hash from the URL immediately after scrolling
+      const timer = setTimeout(() => scrollToListings(), 50);
       if (window.history.replaceState) {
-        // 🐛 FIX APPLIED: Use null instead of '' for the state object to avoid TypeError
         window.history.replaceState(
           null,
           document.title,
           window.location.pathname + window.location.search
         );
       }
-
       return () => clearTimeout(timer);
     }
   }, [scrollToListings]);
 
   if (listingsLoading || myListingsLoading)
     return <LoadingScreen message="Loading the RentHub experience..." />;
-
   if (listingsError || myListingsError)
     return (
       <ErrorScreen
@@ -167,7 +161,6 @@ const HomePage = () => {
       />
     );
 
-  // ✅ Owner Experience
   if (user?.role === "OWNER") {
     return (
       <div className="min-h-screen p-6 bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50">
@@ -191,12 +184,10 @@ const HomePage = () => {
     );
   }
 
-  // ✅ Guest / Renter Experience
   return (
     <div className="relative min-h-screen bg-white overflow-hidden">
-      {/* Hero section with animated abstract shapes */}
+      {/* Hero section */}
       <div className="relative overflow-hidden hero-gradient">
-        {/* Abstract Floating Shapes */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="shape shape-1"></div>
           <div className="shape shape-2"></div>
@@ -206,7 +197,6 @@ const HomePage = () => {
           <div className="motion-trail"></div>
         </div>
 
-        {/* Hero Content */}
         <div className="container mx-auto px-6 py-28 text-center relative z-10">
           <h1 className="text-6xl font-extrabold text-purple-900 mb-4 tracking-tighter leading-tight drop-shadow-md">
             Find Your{" "}
@@ -223,7 +213,6 @@ const HomePage = () => {
             <FilterPanel
               filters={filters}
               setFilters={setFilters}
-              categories={categories}
               onFilterApply={scrollToListings}
               isCompact={true}
             />
@@ -234,7 +223,7 @@ const HomePage = () => {
       {/* Services Section */}
       <ServicesSection />
 
-      {/* Categories */}
+      {/* Category Pills */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-md py-3 overflow-x-auto border-b border-gray-200">
         <div className="flex space-x-3 px-6 container mx-auto w-fit">
           <button
@@ -274,8 +263,6 @@ const HomePage = () => {
             ? `Explore ${activeCategory}s`
             : "All Featured Rentals"}
         </h2>
-
-        {/* Horizontal scroll container */}
         <div className="flex space-x-6 overflow-x-auto scroll-smooth px-2 py-4 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-purple-400 scrollbar-track-gray-100">
           {filteredListings.length === 0 ? (
             <p className="text-center text-gray-500 py-10 text-xl flex-shrink-0 w-full bg-white rounded-xl shadow-inner">
@@ -287,7 +274,7 @@ const HomePage = () => {
               <div
                 key={listing.id}
                 className="flex-none snap-start transition-transform hover:scale-105 hover:shadow-2xl cursor-pointer"
-                style={{ minWidth: "20rem", maxWidth: "24rem" }} // Adjust responsive card width
+                style={{ minWidth: "20rem", maxWidth: "24rem" }}
                 onClick={() => router.push(`/listing/${listing.id}`)}
               >
                 <ListingCard
@@ -302,7 +289,6 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* Guest CTA + Footer */}
       <OwnerCallToAction />
       <Footer />
     </div>
