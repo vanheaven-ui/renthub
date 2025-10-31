@@ -7,11 +7,10 @@ import { Listing, CreateListingPayload } from "@/types";
 import { ListingSchema } from "@/validation/listing";
 import { createListing, updateListing } from "@/lib/api";
 import { convertListingToFormData } from "@/lib/formData";
-// Imported Next.js Image component to replace <img>
 import Image from "next/image";
 
 interface ListingFormProps {
-  initialData?: Listing; // If provided, form will be in "edit" mode
+  initialData?: Listing;
 }
 
 const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
@@ -46,9 +45,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
     }
   };
 
-  const handleCancel = () => {
-    router.back();
-  };
+  const handleCancel = () => router.back();
 
   return (
     <div className="min-h-screen relative flex items-center justify-center bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-4 overflow-hidden">
@@ -86,7 +83,6 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
 
             return (
               <Form className="bg-white/40 backdrop-blur-md p-8 rounded-3xl shadow-2xl space-y-6 relative">
-                {/* Error Message */}
                 {error && (
                   <p className="text-red-500 text-sm text-center font-semibold">
                     {error}
@@ -165,30 +161,57 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
                     Category:
                   </label>
-                  <Field
-                    as="select"
-                    name="category"
-                    className="w-full px-4 py-3 pr-10 bg-white/50 backdrop-blur-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition appearance-none"
-                  >
-                    <option value="">Select a category</option>
-                    <option value="apartment">Apartment</option>
-                    <option value="house">House</option>
-                    <option value="villa">Villa</option>
-                    <option value="guesthouse">Guesthouse</option>
-                  </Field>
-                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-purple-700">
-                    <svg
-                      className="w-4 h-4"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                      xmlns="http://www.w3.org/2000/svg"
+                  <div className="relative">
+                    <Field
+                      as="select"
+                      name="category"
+                      className="w-full px-4 py-3 pr-10 bg-white/50 backdrop-blur-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition appearance-none"
                     >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+                      <option value="">Select a category</option>
+                      <option value="apartment">Apartment</option>
+                      <option value="single-room">Single Room</option>
+                      <option value="self-contained">
+                        Self-Contained Room
+                      </option>
+                      <option value="bedsitter">Bedsitter</option>
+                      <option value="house">House</option>
+                      <option value="bungalow">Bungalow</option>
+                      <option value="flat">Flat</option>
+                      <option value="duplex">Duplex</option>
+                      <option value="mansion">Mansion</option>
+                      <option value="villa">Villa</option>
+                      <option value="guesthouse">Guesthouse</option>
+                      <option value="hostel">Hostel</option>
+                      <option value="boys-quarter">Boys Quarter (BQ)</option>
+                      <option value="shop">Shop / Retail Space</option>
+                      <option value="office">Office Space</option>
+                      <option value="warehouse">Warehouse / Store</option>
+                      <option value="commercial-building">
+                        Commercial Building
+                      </option>
+                      <option value="lodges">Lodge / Inn</option>
+                      <option value="short-stay">Short Stay / Airbnb</option>
+                      <option value="farmhouse">
+                        Farmhouse / Country Home
+                      </option>
+                      <option value="plot">Plot / Land</option>
+                    </Field>
+
+                    {/* Dropdown indicator properly aligned */}
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-purple-700 pointer-events-none">
+                      <svg
+                        className="w-4 h-4"
+                        fill="currentColor"
+                        viewBox="0 0 20 20"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.23 8.27a.75.75 0 01.02-1.06z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
                   </div>
                   <ErrorMessage
                     name="category"
@@ -198,7 +221,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
                 </div>
 
                 {/* Existing Images */}
-                {isEdit && initialData?.images?.length && (
+                {isEdit && initialData?.images?.length ? (
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">
                       Existing Images:
@@ -207,13 +230,10 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
                       {initialData.images.map((imgUrl) =>
                         values.removedImages.includes(imgUrl) ? null : (
                           <div key={imgUrl} className="relative w-24 h-24">
-                            {/* Replaced <img> with optimized <Image /> component */}
                             <Image
                               src={imgUrl}
-                              alt={`Existing image for ${
-                                initialData?.title || "listing"
-                              }`}
-                              fill={true}
+                              alt={initialData?.title || "listing"}
+                              fill
                               sizes="96px"
                               className="object-cover rounded-xl border border-gray-300"
                             />
@@ -229,7 +249,7 @@ const ListingForm: React.FC<ListingFormProps> = ({ initialData }) => {
                       )}
                     </div>
                   </div>
-                )}
+                ) : null}
 
                 {/* New Images */}
                 <div>
