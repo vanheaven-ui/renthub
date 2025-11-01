@@ -46,8 +46,8 @@ const BookingDetailsPage: React.FC<BookingDetailsPageProps> = ({ booking }) => {
   const router = useRouter();
   const [editMode, setEditMode] = useState(false);
 
-  const currentStatusIndex = STATUS_ORDER.indexOf(booking.status);
-  const images = booking.listing?.images ?? [];
+  const currentStatusIndex = STATUS_ORDER.indexOf(booking?.status);
+  const images = booking?.listing?.images ?? [];
 
   // ⭐ Compute average rating
   const avgRating = useMemo(() => {
@@ -157,7 +157,7 @@ const BookingDetailsPage: React.FC<BookingDetailsPageProps> = ({ booking }) => {
                   />
                 ))}
               </div>
-              {booking.status === "CANCELED" && <CanceledStamp />}
+              {booking?.status === "CANCELED" && <CanceledStamp />}
             </div>
           ) : (
             <div className="h-64 flex items-center justify-center bg-gray-100 text-gray-500 font-semibold text-lg rounded-2xl">
@@ -216,7 +216,7 @@ const BookingDetailsPage: React.FC<BookingDetailsPageProps> = ({ booking }) => {
               </div>
 
               {/* Buttons */}
-              {booking.status !== "CANCELED" && (
+              {booking?.status !== "CANCELED" && (
                 <div className="mt-4">
                   {editMode ? (
                     <>
