@@ -26,14 +26,6 @@ const formatNumber = (num: number) => new Intl.NumberFormat().format(num);
 const STATUS_ORDER = ["PENDING", "CONFIRMED", "COMPLETED", "CANCELED"] as const;
 
 // ----------------- Subcomponents -----------------
-const UgxBadge = ({ className }: { className?: string }) => (
-  <span
-    className={`inline-flex items-center justify-center rounded bg-purple-600 text-white px-1.5 py-0.5 text-[10px] font-bold leading-none ${className}`}
-  >
-    UGX
-  </span>
-);
-
 const StampVariants = {
   hidden: { opacity: 0, scale: 0.5, rotate: -20 },
   visible: { opacity: 1, scale: 1, rotate: -10, transition: { duration: 0.4 } },
@@ -54,11 +46,7 @@ const CanceledStamp = () => (
   </div>
 );
 
-const StatusTracker = ({
-  currentStatus,
-}: {
-  currentStatus: Booking["status"];
-}) => {
+const StatusTracker = ({ currentStatus }: { currentStatus: Booking["status"] }) => {
   const currentStatusIndex = STATUS_ORDER.indexOf(currentStatus);
   const isCanceled = currentStatus === "CANCELED";
 
@@ -78,40 +66,20 @@ const StatusTracker = ({
         }
 
         return (
-          <div
-            key={status}
-            className="flex flex-col items-center flex-1 min-w-0"
-          >
+          <div key={status} className="flex flex-col items-center flex-1 min-w-0">
             <motion.div
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
-              transition={{
-                type: "spring",
-                stiffness: 200,
-                damping: 10,
-                delay: index * 0.1,
-              }}
+              transition={{ type: "spring", stiffness: 200, damping: 10, delay: index * 0.1 }}
               className={`w-12 h-12 flex items-center justify-center rounded-full text-sm font-bold transition-all duration-300 ${colorClasses}`}
             >
-              {isCurrent && !isCanceled ? (
-                <ArrowLongRightIcon className="w-6 h-6" />
-              ) : (
-                index + 1
-              )}
+              {isCurrent && !isCanceled ? <ArrowLongRightIcon className="w-6 h-6" /> : index + 1}
             </motion.div>
-            <span
-              className={`text-xs sm:text-sm mt-2 font-semibold text-center whitespace-nowrap ${
-                isActive ? "text-purple-700" : "text-gray-500"
-              }`}
-            >
+            <span className={`text-xs sm:text-sm mt-2 font-semibold text-center whitespace-nowrap ${isActive ? "text-purple-700" : "text-gray-500"}`}>
               {status}
             </span>
             {index < STATUS_ORDER.length - 2 && (
-              <div
-                className={`w-full h-1 -mt-7 mx-auto ${
-                  index < currentStatusIndex ? "bg-purple-400" : "bg-gray-300"
-                } z-[-1]`}
-              ></div>
+              <div className={`w-full h-1 -mt-7 mx-auto ${index < currentStatusIndex ? "bg-purple-400" : "bg-gray-300"} z-[-1]`}></div>
             )}
           </div>
         );
@@ -137,9 +105,7 @@ const DetailRow = ({
   onDateChange?: (key: "startDate" | "endDate", date: string) => void;
   dateKey?: "startDate" | "endDate";
 }) => {
-  const formattedDate = dateValue
-    ? format(new Date(dateValue), "yyyy-MM-dd")
-    : "";
+  const formattedDate = dateValue ? format(new Date(dateValue), "yyyy-MM-dd") : "";
   return (
     <div className="flex justify-between items-center border-b border-purple-100 pb-3">
       <div className="flex items-center gap-3 text-purple-800">
@@ -167,10 +133,7 @@ const BackToListingButton = ({ listingId }: { listingId?: string }) => (
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ type: "spring", stiffness: 100, delay: 0.1 }}
-      whileHover={{
-        scale: 1.03,
-        boxShadow: "0 5px 15px rgba(168, 85, 247, 0.4)",
-      }}
+      whileHover={{ scale: 1.03, boxShadow: "0 5px 15px rgba(168, 85, 247, 0.4)" }}
       whileTap={{ scale: 0.98 }}
     >
       <div className="flex items-center gap-1.5 p-3 px-5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-white font-semibold text-base shadow-lg hover:shadow-xl transition">
@@ -199,8 +162,7 @@ const BookingDetailsPage = () => {
   const booking = bookingQuery.data;
 
   const updateMutation = useMutation({
-    mutationFn: (params: UpdateBookingDatesParams) =>
-      updateBookingDates(params),
+    mutationFn: (params: UpdateBookingDatesParams) => updateBookingDates(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["booking", id] });
       setEditMode(false);
@@ -220,76 +182,39 @@ const BookingDetailsPage = () => {
   const { avgRating, totalDays } = useMemo(() => {
     if (!booking) return { avgRating: 0, totalDays: 0 };
     const reviews = booking.listing?.reviews ?? [];
-    const avg = reviews.length
-      ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length
-      : 0;
-    const start = new Date(
-      editMode && newDates.startDate ? newDates.startDate : booking.startDate
-    );
-    const end = new Date(
-      editMode && newDates.endDate ? newDates.endDate : booking.endDate
-    );
+    const avg = reviews.length ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length : 0;
+    const start = new Date(editMode && newDates.startDate ? newDates.startDate : booking.startDate);
+    const end = new Date(editMode && newDates.endDate ? newDates.endDate : booking.endDate);
     const nights = differenceInDays(end, start);
     return { avgRating: avg, totalDays: nights > 0 ? nights : 0 };
   }, [booking, editMode, newDates]);
 
   const estimatedNewPrice = useMemo(() => {
     if (!booking) return "0";
-    const originalNights = Math.max(
-      differenceInDays(new Date(booking.endDate), new Date(booking.startDate)),
-      1
-    );
+    const originalNights = Math.max(differenceInDays(new Date(booking.endDate), new Date(booking.startDate)), 1);
     const pricePerNight = booking.totalPrice / originalNights;
     const newPrice = pricePerNight * totalDays;
-    return editMode && totalDays > 0
-      ? newPrice.toFixed(2)
-      : booking.totalPrice.toFixed(2);
+    return editMode && totalDays > 0 ? newPrice.toFixed(2) : booking.totalPrice.toFixed(2);
   }, [booking, totalDays, editMode]);
 
-  const handleDateChange = (key: "startDate" | "endDate", date: string) =>
-    setNewDates((prev) => ({ ...prev, [key]: date }));
-
+  const handleDateChange = (key: "startDate" | "endDate", date: string) => setNewDates((prev) => ({ ...prev, [key]: date }));
   const handleSave = () => {
-    if (!newDates.startDate || !newDates.endDate)
-      return alert("Please select both check-in and check-out dates.");
-    if (new Date(newDates.startDate) >= new Date(newDates.endDate))
-      return alert("Check-in must be before Check-out.");
-
-    updateMutation.mutate({
-      bookingId: id,
-      startDate: newDates.startDate,
-      endDate: newDates.endDate,
-      currentBooking: booking!,
-    });
+    if (!newDates.startDate || !newDates.endDate) return alert("Please select both check-in and check-out dates.");
+    if (new Date(newDates.startDate) >= new Date(newDates.endDate)) return alert("Check-in must be before Check-out.");
+    updateMutation.mutate({ bookingId: id, startDate: newDates.startDate, endDate: newDates.endDate, currentBooking: booking! });
   };
-
-  const handleBookAgain = () => {
-    if (booking?.listing?.id) {
-      router.push(`/booking/create?listingId=${booking.listing.id}`);
-    }
-  };
-
+  const handleBookAgain = () => booking?.listing?.id && router.push(`/booking/create?listingId=${booking.listing.id}`);
   const handleCancel = () => router.push("/booking/myBookings");
 
   if (bookingQuery.isLoading || updateMutation.isPending)
-    return (
-      <LoadingScreen
-        message={
-          updateMutation.isPending
-            ? "Updating booking dates..."
-            : "Loading booking details..."
-        }
-      />
-    );
+    return <LoadingScreen message={updateMutation.isPending ? "Updating booking dates..." : "Loading booking details..."} />;
 
   if (bookingQuery.isError || !booking)
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-gray-600 p-8 bg-gray-50">
-        <h1 className="text-4xl font-extrabold text-red-600">
-          Booking Not Found 😢
-        </h1>
+        <h1 className="text-4xl font-extrabold text-red-600">Booking Not Found 😢</h1>
         <p className="text-xl mt-4">
-          We couldn't load the details for this booking.
+          We couldn&apos;t load the details for this booking.
         </p>
         <button
           onClick={() => router.push("/booking/my-bookings")}
@@ -301,8 +226,7 @@ const BookingDetailsPage = () => {
     );
 
   const images = booking.listing?.images ?? [];
-  const isCancellable =
-    booking.status !== "CANCELED" && booking.status !== "COMPLETED";
+  const isCancellable = booking.status !== "CANCELED" && booking.status !== "COMPLETED";
   const isCompleted = booking.status === "COMPLETED";
   const isPaymentPending = booking.paymentStatus === "PENDING";
   const paymentRoute = `/booking/${id}/checkout`;
@@ -328,10 +252,7 @@ const BookingDetailsPage = () => {
           initial={{ x: -100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 100, delay: 0.2 }}
-          whileHover={{
-            scale: 1.05,
-            boxShadow: "0 10px 30px rgba(168, 85, 247, 0.5)",
-          }}
+          whileHover={{ scale: 1.05, boxShadow: "0 10px 30px rgba(168, 85, 247, 0.5)" }}
           whileTap={{ scale: 0.95 }}
         >
           <div className="flex items-center gap-1.5 p-2 pr-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full text-white font-semibold text-sm">
@@ -364,20 +285,13 @@ const BookingDetailsPage = () => {
               {/* Image Grid */}
               <div className="grid grid-cols-2 grid-rows-2 gap-1 h-96 relative">
                 {images.slice(0, 4).map((img, idx) => (
-                  <div
-                    key={idx}
-                    className={`relative overflow-hidden ${
-                      idx === 0 ? "row-span-2" : ""
-                    }`}
-                  >
+                  <div key={idx} className={`relative overflow-hidden ${idx === 0 ? "row-span-2" : ""}`}>
                     <Image
                       src={img}
                       alt={`${booking.listing?.title} image ${idx + 1}`}
                       fill
                       sizes="(max-width: 1024px) 100vw, 66vw"
-                      className={`object-cover w-full h-full transition-transform duration-500 hover:scale-110 ${
-                        idx === 0 ? "brightness-95" : "brightness-85"
-                      }`}
+                      className={`object-cover w-full h-full transition-transform duration-500 hover:scale-110 ${idx === 0 ? "brightness-95" : "brightness-85"}`}
                     />
                     {idx === 0 && (
                       <div className="absolute inset-0 bg-black/10 flex flex-col justify-end p-6">
@@ -401,40 +315,27 @@ const BookingDetailsPage = () => {
               <div className="p-6 sm:p-8">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b pb-4 mb-4 border-purple-100">
                   <div className="mb-4 sm:mb-0">
-                    <h3 className="text-2xl font-bold text-gray-900">
-                      Property Details
-                    </h3>
+                    <h3 className="text-2xl font-bold text-gray-900">Property Details</h3>
                   </div>
                   <div className="flex items-center">
                     <StarRating rating={avgRating} />
                     <span className="ml-3 text-gray-700 font-medium text-sm">
-                      <span className="font-bold text-purple-700">
-                        {avgRating.toFixed(1)}/5
-                      </span>{" "}
+                      <span className="font-bold text-purple-700">{avgRating.toFixed(1)}/5</span>{" "}
                       ({booking.listing?.reviews?.length || 0} reviews)
                     </span>
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <h4 className="text-xl font-semibold text-purple-800 mb-3">
-                    Your Stay Overview
-                  </h4>
+                  <h4 className="text-xl font-semibold text-purple-800 mb-3">Your Stay Overview</h4>
                   <p className="text-gray-700 leading-relaxed">
-                    This reservation is for{" "}
-                    <b className="text-pink-600">
-                      {totalDays} night{totalDays !== 1 ? "s" : ""}
-                    </b>
-                    , and we hope you enjoy your experience at this stunning{" "}
-                    {booking.listing?.location || "property"}.
+                    This reservation is for <b className="text-pink-600">{totalDays} night{totalDays !== 1 ? "s" : ""}</b>, and we hope you enjoy your experience at this stunning {booking.listing?.location || "property"}.
                   </p>
                 </div>
 
                 <div className="mt-8 border-t pt-4 space-y-4">
                   <DetailRow
-                    icon={
-                      <CalendarDaysIcon className="w-6 h-6 text-purple-600" />
-                    }
+                    icon={<CalendarDaysIcon className="w-6 h-6 text-purple-600" />}
                     label="Check-In"
                     value={format(new Date(booking.startDate), "yyyy-MM-dd")}
                     isEditing={editMode}
@@ -443,9 +344,7 @@ const BookingDetailsPage = () => {
                     dateKey="startDate"
                   />
                   <DetailRow
-                    icon={
-                      <CalendarDaysIcon className="w-6 h-6 text-purple-600" />
-                    }
+                    icon={<CalendarDaysIcon className="w-6 h-6 text-purple-600" />}
                     label="Check-Out"
                     value={format(new Date(booking.endDate), "yyyy-MM-dd")}
                     isEditing={editMode}
@@ -454,57 +353,58 @@ const BookingDetailsPage = () => {
                     dateKey="endDate"
                   />
                   <DetailRow
-                    icon={
-                      <CurrencyDollarIcon className="w-6 h-6 text-purple-600" />
-                    }
+                    icon={<CurrencyDollarIcon className="w-6 h-6 text-purple-600" />}
                     label="Total Price"
-                    value={`UGX ${formatNumber(Number(estimatedNewPrice))}`}
+                    value={`$${estimatedNewPrice}`}
                     isEditing={false}
                   />
                 </div>
 
-                {/* Action Buttons */}
                 <div className="mt-6 flex flex-wrap gap-4">
-                  {isCancellable && !isPaymentPending && (
-                    <>
-                      {editMode ? (
-                        <button
-                          onClick={handleSave}
-                          className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold shadow-md transition"
-                        >
-                          Save Dates
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setEditMode(true)}
-                          className="px-6 py-3 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-bold shadow-md transition"
-                        >
-                          Edit Dates
-                        </button>
-                      )}
-                      <button
-                        onClick={handleCancel}
-                        className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-md transition"
-                      >
-                        Cancel Booking
-                      </button>
-                    </>
+                  {editMode ? (
+                    <button
+                      onClick={handleSave}
+                      className="px-6 py-3 bg-pink-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
+                    >
+                      Save Changes
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setEditMode(true)}
+                      className="px-6 py-3 bg-purple-600 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
+                    >
+                      Edit Dates
+                    </button>
                   )}
+
+                  {isCancellable && !editMode && (
+                    <button
+                      onClick={handleCancel}
+                      className="px-6 py-3 bg-red-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
+                    >
+                      Cancel Booking
+                    </button>
+                  )}
+
                   {isCompleted && (
                     <button
                       onClick={handleBookAgain}
-                      className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-md transition"
+                      className="px-6 py-3 bg-green-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105"
                     >
                       Book Again
                     </button>
                   )}
+
                   {isPaymentPending && (
-                    <Link href={paymentRoute}>
-                      <button className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-full font-bold shadow-md transition">
+                    <Link href={paymentRoute} passHref>
+                      <button className="px-6 py-3 bg-blue-500 text-white font-bold rounded-full shadow-lg hover:shadow-xl transition transform hover:scale-105">
                         Complete Payment
                       </button>
                     </Link>
                   )}
+                </div>
+
+                <div className="mt-8">
                   <BackToListingButton listingId={booking.listing?.id} />
                 </div>
               </div>

@@ -527,7 +527,7 @@ const CheckoutPage = () => {
                   Payment Confirmed! 🎉
                 </h3>
                 <p className="text-lg text-gray-700 dark:text-gray-300 mb-8">
-                  Your reservation is secured. We're redirecting you now...
+                  Your reservation is secured. We&apos;re redirecting you now...
                 </p>
                 <button
                   onClick={() => router.push(`/booking/${bookingId}`)}
