@@ -214,7 +214,7 @@ const HomePage = () => {
               filters={filters}
               setFilters={setFilters}
               onFilterApply={scrollToListings}
-              isCompact={true}
+              isCompact={false}
             />
           </div>
         </div>
