@@ -299,7 +299,7 @@ const MyBookingsPage = () => {
       ? "grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto"
       : bookings?.length === 3
       ? "grid-cols-1 md:grid-cols-3 mx-auto"
-      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+      : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3";
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-6">

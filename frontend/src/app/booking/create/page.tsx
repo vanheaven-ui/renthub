@@ -7,6 +7,7 @@ import { Formik, Form, Field, ErrorMessage } from "formik";
 import Image from "next/image";
 import {
   CalendarDaysIcon,
+  CreditCardIcon,
   CurrencyDollarIcon,
 } from "@heroicons/react/24/solid";
 
@@ -15,11 +16,20 @@ import { Listing, Booking } from "@/types";
 import { BookingSchema } from "@/validation/booking";
 import LoadingScreen from "@/components/LoadingScreen";
 import { useAuth } from "@/app/context/AuthProvider";
+import { formatNumber } from "@/lib/formatNumbers";
+
+// 💰 Styled UGX Badge
+const UgxBadge = ({ className }: { className?: string }) => (
+  <span
+    className={`inline-flex items-center justify-center rounded bg-purple-600 text-white px-1.5 py-0.5 text-[10px] font-bold leading-none ${className}`}
+  >
+    UGX
+  </span>
+);
 
 // Force full client rendering
 export const dynamic = "force-dynamic";
 
-// Wrap main content in a separate component
 const BookingForm: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -43,7 +53,7 @@ const BookingForm: React.FC = () => {
     enabled: !!listingId && isMounted,
   });
 
-  // Fetch user's bookings for this listing
+  // Fetch user's existing bookings for this listing
   useEffect(() => {
     if (!user || !isMounted) return;
 
@@ -151,8 +161,8 @@ const BookingForm: React.FC = () => {
             />
           </div>
           <div className="mt-6 text-xl font-semibold text-gray-800 flex items-center gap-2">
-            <CurrencyDollarIcon className="w-6 h-6 text-pink-600" />
-            <span>{listing.pricePerDay}</span>
+            <UgxBadge />
+            <span>{formatNumber(listing.pricePerDay)}</span>
             <span className="text-sm font-normal text-gray-500">/ night</span>
           </div>
         </div>
@@ -230,8 +240,9 @@ const BookingForm: React.FC = () => {
                     <span className="text-xl font-bold text-gray-800">
                       Total:
                     </span>
-                    <span className="text-2xl font-extrabold text-pink-600">
-                      ${totalCost}
+                    <span className="text-2xl font-extrabold text-pink-600 flex items-center gap-1.5">
+                      <UgxBadge />
+                      <span>{formatNumber(totalCost)}</span>
                     </span>
                   </div>
 
@@ -260,7 +271,7 @@ const BookingForm: React.FC = () => {
 };
 
 // Main export with Suspense wrapper
-export default function CreateBookingPage() {
+const CreateBookingPage = () => {
   return (
     <Suspense
       fallback={<LoadingScreen message="Initializing booking page..." />}
@@ -268,4 +279,6 @@ export default function CreateBookingPage() {
       <BookingForm />
     </Suspense>
   );
-}
+};
+
+export default CreateBookingPage;

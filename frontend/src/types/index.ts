@@ -113,6 +113,13 @@ export interface BookingDetails {
   paymentStatus: PaymentStatus;
 }
 
+export interface UpdateBookingDatesParams {
+  bookingId: string;
+  startDate: string; // ISO date string, e.g. "2025-11-01"
+  endDate: string;   // ISO date string
+  currentBooking: Booking; // The full booking object, used to calculate price, validate, etc.
+}
+
 // ----------------- MESSAGES -----------------
 export interface Message {
   id: string;
