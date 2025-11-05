@@ -5,7 +5,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import dynamic from "next/dynamic";
-import { CheckCircleIcon } from "@heroicons/react/24/solid";
+import {
+  CheckCircleIcon,
+  CalendarDaysIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/solid";
 import Link from "next/link";
 import { ArrowLongLeftIcon } from "@heroicons/react/24/outline";
 import type { Booking, BookingStatus, UnreadCount } from "@/types";
@@ -30,8 +34,47 @@ const BookingChat = dynamic(() => import("@/components/BookingChat"), {
 
 const ITEMS_PER_PAGE = 3;
 
+// --- New Empty State Component ---
+const NoBookingsYet = () => (
+  <motion.div
+    className="max-w-xl mx-auto mt-24 p-10 bg-white/70 backdrop-blur-md rounded-3xl shadow-3xl border-4 border-dashed border-purple-300/50 text-center"
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    transition={{ duration: 0.6, type: "spring", stiffness: 100 }}
+  >
+    <motion.div
+      animate={{ rotate: [0, -5, 5, 0] }}
+      transition={{ duration: 2, repeat: Infinity, repeatDelay: 5 }}
+    >
+      <CalendarDaysIcon className="w-20 h-20 mx-auto text-purple-500 mb-4" />
+    </motion.div>
+    <h2 className="text-3xl font-extrabold text-purple-900 mb-3">
+      It&apos;s Quiet Here...
+    </h2>
+    <p className="text-lg text-gray-700 mb-6">
+      You have not made or received any bookings yet. Time to start exploring!
+    </p>
+    <Link href="/#listings" passHref>
+      <motion.button
+        className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-full shadow-lg text-white bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-500/50 transition duration-300 ease-in-out transform"
+        whileHover={{
+          scale: 1.05,
+          boxShadow: "0 15px 25px rgba(236, 72, 153, 0.4)",
+        }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
+        Find Your First Listing
+      </motion.button>
+    </Link>
+  </motion.div>
+);
+// ------------------------------------
+
 const MyBookingsPage = () => {
   const { user } = useAuth();
+  console.log(user);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -291,6 +334,21 @@ const MyBookingsPage = () => {
 
   if (!user) return null;
   if (isLoading) return <LoadingScreen message="Loading your bookings..." />;
+
+  // --- Conditional Rendering for Empty State ---
+  if (!bookings || bookings.length === 0) {
+    return (
+      <div className="relative min-h-screen bg-gradient-to-br from-purple-100 via-pink-50 to-blue-100 p-6">
+        <div className="container mx-auto">
+          <h1 className="text-4xl font-bold mb-4 text-purple-900 text-center">
+            My Bookings 🗓️
+          </h1>
+          <NoBookingsYet />
+        </div>
+      </div>
+    );
+  }
+  // ------------------------------------
 
   const gridClass =
     bookings?.length === 1
