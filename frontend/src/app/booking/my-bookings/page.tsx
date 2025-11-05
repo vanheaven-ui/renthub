@@ -22,6 +22,7 @@ import { socket } from "@/lib/socket";
 import { useAuth } from "@/app/context/AuthProvider";
 import BookingCard from "@/components/BookingCard";
 import LoadingScreen from "@/components/LoadingScreen";
+import { User } from "@/types";
 
 const BookingChat = dynamic(() => import("@/components/BookingChat"), {
   ssr: false,
@@ -32,10 +33,14 @@ const BookingChat = dynamic(() => import("@/components/BookingChat"), {
   ),
 });
 
+interface NoBookingsYetProps {
+  user: User;
+}
+
 const ITEMS_PER_PAGE = 3;
 
 // --- New Empty State Component ---
-const NoBookingsYet = () => (
+const NoBookingsYet = ({ user }: NoBookingsYetProps) => (
   <motion.div
     className="max-w-xl mx-auto mt-24 p-10 bg-white/70 backdrop-blur-md rounded-3xl shadow-3xl border-4 border-dashed border-purple-300/50 text-center"
     initial={{ opacity: 0, scale: 0.9 }}
@@ -52,7 +57,9 @@ const NoBookingsYet = () => (
       It&apos;s Quiet Here...
     </h2>
     <p className="text-lg text-gray-700 mb-6">
-      You have not made or received any bookings yet. Time to start exploring!
+      {user.role === "RENTER" && "You have not made"}
+      {user.role === "OWNER" && "received any bookings yet."} Time to start
+      exploring!
     </p>
     <Link href="/#listings" passHref>
       <motion.button
@@ -343,7 +350,7 @@ const MyBookingsPage = () => {
           <h1 className="text-4xl font-bold mb-4 text-purple-900 text-center">
             My Bookings 🗓️
           </h1>
-          <NoBookingsYet />
+          <NoBookingsYet user={user} />
         </div>
       </div>
     );
