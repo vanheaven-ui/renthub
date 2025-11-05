@@ -41,12 +41,18 @@ const BookingCard = ({
     isPast(bookingEndDate) || isSameDay(bookingEndDate, today);
 
   // ✅ Updated logic for showing Pay button
+  // const showPaymentButton =
+  //   isRenter &&
+  //   (
+  //     (booking.status === "PENDING" && !isDueOrPast) ||
+  //     (booking.status === "CONFIRMED" && booking.paymentStatus === "PENDING")
+  //   );
+
   const showPaymentButton =
     isRenter &&
-    (
-      (booking.status === "PENDING" && !isDueOrPast) ||
-      (booking.status === "CONFIRMED" && booking.paymentStatus === "PENDING")
-    );
+    booking.status === "CONFIRMED" &&
+    booking.paymentStatus === "PENDING" &&
+    isDueOrPast;
 
   const showOwnerButtons = isOwner && booking.status === "PENDING";
   const isPaymentComplete = booking.paymentStatus === "PAID";

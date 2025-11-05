@@ -94,7 +94,7 @@ const ListingPage = ({ params }: { params: { id: string } }) => {
         className="absolute -bottom-32 -right-32 w-96 h-96 bg-purple-400 rounded-full mix-blend-multiply filter blur-4xl opacity-30 pointer-events-none"
       />
 
-      {/* ⬅️ NEW: Floating Back to Listings Button */}
+      {/* Floating Back to Listings Button */}
       <Link href="/#listings" passHref>
         <motion.div
           className="fixed top-20 left-4 md:left-10 z-30 cursor-pointer p-2 rounded-full shadow-2xl bg-white/70 backdrop-blur-sm"

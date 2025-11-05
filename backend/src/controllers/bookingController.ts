@@ -275,3 +275,86 @@ export const updateBookingStatus = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
+/**
+ * Update booking dates
+ */
+export const updateBookingDates = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.body;
+    const userId = req.user?.userId;
+
+    if (!userId)
+      return res.status(401).json({ message: "User not authenticated." });
+    if (!startDate || !endDate)
+      return res
+        .status(400)
+        .json({ message: "Start and end dates are required." });
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking)
+      return res.status(404).json({ message: "Booking not found." });
+    if (booking.renterId !== userId)
+      return res
+        .status(403)
+        .json({ message: "Not authorized to edit this booking." });
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (start >= end)
+      return res
+        .status(400)
+        .json({ message: "Check-in must be before Check-out." });
+
+    // Check overlapping bookings
+    const overlapping = await prisma.booking.findFirst({
+      where: {
+        listingId: booking.listingId,
+        AND: [{ startDate: { lte: end } }, { endDate: { gte: start } }],
+        status: { in: ["PENDING", "CONFIRMED"] },
+        NOT: { id: booking.id }, // ignore this booking
+      },
+    });
+
+    if (overlapping) {
+      return res
+        .status(400)
+        .json({
+          message: `This listing is already booked from ${overlapping.startDate.toDateString()} to ${overlapping.endDate.toDateString()}.`,
+        });
+    }
+
+    // Recalculate price
+    const listing = await prisma.listing.findUnique({
+      where: { id: booking.listingId },
+    });
+    if (!listing)
+      return res.status(404).json({ message: "Listing not found." });
+
+    const dayCount = Math.ceil(
+      (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    const totalPrice = dayCount * listing.pricePerDay;
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id },
+      data: { startDate: start, endDate: end, totalPrice },
+      include: {
+        listing: true,
+        renter: true,
+        owner: true,
+      },
+    });
+
+    res
+      .status(200)
+      .json({
+        message: "Booking dates updated successfully.",
+        booking: updatedBooking,
+      });
+  } catch (error) {
+    console.error("Error updating booking dates:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
