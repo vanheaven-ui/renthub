@@ -56,12 +56,20 @@ const NoBookingsYet = ({ user }: NoBookingsYetProps) => (
     <h2 className="text-3xl font-extrabold text-purple-900 mb-3">
       It&apos;s Quiet Here...
     </h2>
-    <p className="text-lg text-gray-700 mb-6">
-      {user.role === "RENTER" && "You have not made"}
-      {user.role === "OWNER" && "received any bookings yet."} Time to start
-      exploring!
-    </p>
-    <Link href="/#listings" passHref>
+    {user.role === "RENTER" && (
+      <p className="text-lg text-gray-700 mb-6">
+        You have not made any bookings yet. Time to start exploring!
+      </p>
+    )}
+    {user.role === "OWNER" && (
+      <p className="text-lg text-gray-700 mb-6">
+        You have not received any bookings yet. List your items to get started!
+      </p>
+    )}
+    <Link
+      href={user.role === "RENTER" ? "/#listings" : "/listing/my-listings"}
+      passHref
+    >
       <motion.button
         className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-full shadow-lg text-white bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-purple-500/50 transition duration-300 ease-in-out transform"
         whileHover={{
@@ -71,7 +79,9 @@ const NoBookingsYet = ({ user }: NoBookingsYetProps) => (
         whileTap={{ scale: 0.95 }}
       >
         <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
-        Find Your First Listing
+        {user.role === "RENTER"
+          ? "Find Your First Listing"
+          : "View My Listings"}
       </motion.button>
     </Link>
   </motion.div>
