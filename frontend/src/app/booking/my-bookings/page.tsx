@@ -80,7 +80,6 @@ const NoBookingsYet = ({ user }: NoBookingsYetProps) => (
 
 const MyBookingsPage = () => {
   const { user } = useAuth();
-  console.log(user);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -155,14 +154,18 @@ const MyBookingsPage = () => {
   useEffect(() => {
     if (!user) return;
 
-    socket.on("updateUnreadCount", handleUnreadUpdate);
-    socket.on("bookingStatusUpdated", handleStatusUpdate);
-    socket.on("newBooking", handleNewBooking);
+    if (socket) {
+      socket.on("updateUnreadCount", handleUnreadUpdate);
+      socket.on("bookingStatusUpdated", handleStatusUpdate);
+      socket.on("newBooking", handleNewBooking);
+    }
 
     return () => {
-      socket.off("updateUnreadCount", handleUnreadUpdate);
-      socket.off("bookingStatusUpdated", handleStatusUpdate);
-      socket.off("newBooking", handleNewBooking);
+      if (socket) {
+        socket.off("updateUnreadCount", handleUnreadUpdate);
+        socket.off("bookingStatusUpdated", handleStatusUpdate);
+        socket.off("newBooking", handleNewBooking);
+      }
     };
   }, [user, handleUnreadUpdate, handleStatusUpdate, handleNewBooking]);
 
